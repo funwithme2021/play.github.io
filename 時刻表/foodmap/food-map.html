@@ -117,6 +117,13 @@
         <label for="mapGradeSelect">等第</label>
         <select id="mapGradeSelect"></select>
       </div>
+      <div class="field">
+        <label for="mapFavoriteSelect">收藏</label>
+        <select id="mapFavoriteSelect">
+          <option value="" selected>全部</option>
+          <option value="favorites">只看收藏</option>
+        </select>
+      </div>
     </div>
 
     <div id="keywordContainer" class="field-grid" style="display:none;">
@@ -129,6 +136,7 @@
     <div class="toolbar-actions">
       <button id="mapSearchBtn">搜尋</button>
       <button id="locateMeBtn">定位到我的位置</button>
+      <button id="mapShareBtn" class="button-secondary">分享目前篩選</button>
     </div>
   </section>
 
@@ -144,6 +152,18 @@
       <div id="map"></div>
       <div class="map-legend" id="mapLegend"></div>
     </div>
+  </section>
+
+  <section class="section-panel map-results-panel">
+    <div class="section-heading">
+      <div>
+        <h2>目前篩選結果</h2>
+        <p>這裡會同步列出地圖上的店家，方便快速收藏、聚焦與外部導航。</p>
+      </div>
+    </div>
+
+    <div id="mapResultSummary" class="map-result-summary"></div>
+    <div id="mapResultList" class="map-result-list"></div>
   </section>
 </main>
 
@@ -276,6 +296,103 @@ function getMarkerIcon(grade){
   });
 }
 
+const FAVORITES_STORAGE_KEY = "foodmapFavorites";
+let favoriteKeys = loadFavoriteKeys();
+let currentMapResults = [];
+let markerLookup = new Map();
+let userCircle = null;
+
+function getStoreKey(d){
+  return [d.storeName, d.city || "", d.district || ""].join("||");
+}
+
+function loadFavoriteKeys(){
+  try {
+    const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+
+function saveFavoriteKeys(){
+  try {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...favoriteKeys]));
+  } catch (err) {
+    console.warn("收藏清單無法寫入 localStorage", err);
+  }
+}
+
+function isFavoriteStore(d){
+  return favoriteKeys.has(getStoreKey(d));
+}
+
+function passesFavoriteFilter(d){
+  return document.getElementById("mapFavoriteSelect").value !== "favorites" || isFavoriteStore(d);
+}
+
+function toggleFavoriteByKey(storeKey){
+  if(favoriteKeys.has(storeKey)){
+    favoriteKeys.delete(storeKey);
+  } else {
+    favoriteKeys.add(storeKey);
+  }
+  saveFavoriteKeys();
+  showMarkers();
+}
+
+function applySearchModeUI(){
+  const isMode1 = getSearchMode() === "mode1";
+  document.getElementById("filterContainer").style.display = isMode1 ? "" : "none";
+  document.getElementById("keywordContainer").style.display = isMode1 ? "none" : "";
+}
+
+function buildMapSearchParams(){
+  const params = new URLSearchParams();
+  params.set("mode", getSearchMode());
+
+  const maybeSet = (key, value) => {
+    if(value){
+      params.set(key, value);
+    }
+  };
+
+  maybeSet("city", document.getElementById("mapCitySelect").value);
+  maybeSet("district", document.getElementById("mapDistSelect").value);
+  maybeSet("category", document.getElementById("mapCategorySelect").value);
+  maybeSet("price", document.getElementById("mapPriceSelect").value);
+  maybeSet("grade", document.getElementById("mapGradeSelect").value);
+  maybeSet("fav", document.getElementById("mapFavoriteSelect").value);
+  maybeSet("keyword", document.getElementById("keywordInput").value.trim());
+  return params;
+}
+
+function syncMapUrlState(){
+  const url = new URL(window.location.href);
+  url.search = buildMapSearchParams().toString();
+  history.replaceState(null, "", url);
+}
+
+function applyMapUrlState(){
+  const params = new URLSearchParams(window.location.search);
+  const meaningfulKeys = [...params.keys()].filter(key => key !== "storeName");
+  if(meaningfulKeys.length === 0) return false;
+
+  const mode = params.get("mode") === "mode2" ? "mode2" : "mode1";
+  document.querySelector(`input[name="searchMode"][value="${mode}"]`).checked = true;
+  document.getElementById("mapCitySelect").value = params.get("city") || "";
+  updateDistrictOptions();
+  document.getElementById("mapDistSelect").value = params.get("district") || "";
+  document.getElementById("mapCategorySelect").value = params.get("category") || "";
+  document.getElementById("mapPriceSelect").value = params.get("price") || "";
+  document.getElementById("mapGradeSelect").value = params.get("grade") || "";
+  document.getElementById("mapFavoriteSelect").value = params.get("fav") === "favorites" ? "favorites" : "";
+  document.getElementById("keywordInput").value = params.get("keyword") || "";
+  applySearchModeUI();
+  return true;
+}
+
 function initMap(){
   // 動態等第 => foodData
   assignRatioGrades(foodData,5);
@@ -314,13 +431,7 @@ function initMap(){
   // Radio (mode1, mode2) => 切換下拉/關鍵字
   document.querySelectorAll('input[name="searchMode"]').forEach(radio=>{
     radio.addEventListener("change",(e)=>{
-      if(e.target.value==="mode1"){
-        document.getElementById("filterContainer").style.display="";
-        document.getElementById("keywordContainer").style.display="none";
-      } else {
-        document.getElementById("filterContainer").style.display="none";
-        document.getElementById("keywordContainer").style.display="";
-      }
+      applySearchModeUI();
     });
   });
 
@@ -329,8 +440,16 @@ function initMap(){
 
   // 「定位到我的位置」
   document.getElementById("locateMeBtn").addEventListener("click", locateMe);
+  document.getElementById("mapShareBtn").addEventListener("click", shareMapState);
+  document.getElementById("keywordInput").addEventListener("keydown", (evt)=>{
+    if(evt.key === "Enter"){
+      showMarkers();
+    }
+  });
 
   // 預設顯示
+  applySearchModeUI();
+  applyMapUrlState();
   showMarkers();
 
   // 建立等第圖例
@@ -423,6 +542,7 @@ function filterByDropdown(data){
     if(cat && d.category!==cat) return false;
     if(price && d.priceLevel!==price) return false;
     if(grd && d.ratioGrade!==grd) return false;
+    if(!passesFavoriteFilter(d)) return false;
     return true;
   });
 }
@@ -430,17 +550,18 @@ function filterByDropdown(data){
 // 功能2: 關鍵字
 function filterByKeyword(data){
   const kw= document.getElementById("keywordInput").value.trim().toLowerCase();
-  if(!kw) return data;
+  if(!kw) return data.filter(d=> Number.isFinite(d.lat) && Number.isFinite(d.lng) && passesFavoriteFilter(d));
   return data.filter(d=>{
     if(!d.lat|| !d.lng) return false;
     let combo= (d.storeName + d.city + d.district + d.category + d.priceLevel).toLowerCase();
-    return combo.includes(kw);
+    return combo.includes(kw) && passesFavoriteFilter(d);
   });
 }
 
 function showMarkers(){
   // 清除
   markerCluster.clearLayers();
+  markerLookup = new Map();
 
   // 讀URL
   let sp= new URLSearchParams(window.location.search);
@@ -453,20 +574,26 @@ function showMarkers(){
   } else {
     result= filterByKeyword(foodData);
   }
+  currentMapResults = result;
 
   // 建Marker
   let theseMarkers=[];
   result.forEach(d=>{
     let m= createMarker(d);
+    markerLookup.set(getStoreKey(d), m);
     theseMarkers.push(m);
   });
   markerCluster.addLayers(theseMarkers);
+  renderMapResultSummary(result);
+  renderMapResultList(result);
 
   // 若帶 storeName => 找=> setView
   if(storeParam){
     let found= result.find(x=> x.storeName=== storeParam);
     if(found){
       map.setView([found.lat, found.lng],15);
+      markerLookup.get(getStoreKey(found))?.openPopup();
+      syncMapUrlState();
       return;
     }
   }
@@ -475,25 +602,126 @@ function showMarkers(){
     let group= L.featureGroup(theseMarkers);
     map.fitBounds(group.getBounds(), { padding:[20,20] });
   }
+  syncMapUrlState();
 }
 
 // 建立Marker
 function createMarker(d){
   let grade= d.ratioGrade;
   let sc= computeSingleScore(d).toFixed(2);
+  const favoriteMark = isFavoriteStore(d) ? "★ " : "";
   let mk= L.marker([d.lat, d.lng],{
     icon: getMarkerIcon(grade)
   });
   let html= `
     <b><a href="${d.gmapUrl||"#"}" target="_blank"
           style="color:blue;text-decoration:none;">
-          ${d.storeName}
+          ${favoriteMark}${d.storeName}
          </a></b><br/>
     <small>評分(100): ${sc}</small><br/>
-    <small>等第: ${grade}</small>
+    <small>等第: ${grade}</small><br/>
+    <small>${d.city}${d.district ? `｜${d.district}` : ""}</small>
   `;
   mk.bindPopup(html);
   return mk;
+}
+
+function renderMapResultSummary(result){
+  const summary = document.getElementById("mapResultSummary");
+  if(result.length === 0){
+    summary.innerHTML = `<span class="summary-pill">目前沒有符合條件的店家</span>`;
+    return;
+  }
+
+  const cityCountMap = {};
+  result.forEach(item => {
+    cityCountMap[item.city] = (cityCountMap[item.city] || 0) + 1;
+  });
+  const topCity = Object.entries(cityCountMap).sort((a,b)=> b[1] - a[1])[0];
+  const favoriteCount = result.filter(item => isFavoriteStore(item)).length;
+
+  summary.innerHTML = `
+    <span class="summary-pill">共 ${result.length} 間店家</span>
+    <span class="summary-pill">收藏命中 ${favoriteCount} 間</span>
+    <span class="summary-pill">最多來自 ${topCity ? `${topCity[0]}（${topCity[1]} 間）` : "未知"}</span>
+  `;
+}
+
+function renderMapResultList(result){
+  const list = document.getElementById("mapResultList");
+  if(result.length === 0){
+    list.innerHTML = `<div class="empty-card">目前沒有符合條件的地圖結果，試著放寬篩選條件。</div>`;
+    return;
+  }
+
+  const preview = result.slice(0, 24);
+  list.innerHTML = preview.map(item => {
+    const key = encodeURIComponent(getStoreKey(item));
+    const score = computeSingleScore(item).toFixed(2);
+    return `
+      <article class="map-result-item">
+        <div class="map-result-head">
+          <div>
+            <a class="map-result-title" href="${item.gmapUrl || "#"}" target="_blank" rel="noopener noreferrer">${item.storeName}</a>
+            <div class="map-result-subtitle">${item.city}${item.district ? `｜${item.district}` : ""}</div>
+          </div>
+          <button type="button" class="favorite-btn${isFavoriteStore(item) ? " is-active" : ""}" data-favorite-key="${key}" title="${isFavoriteStore(item) ? "取消收藏" : "加入收藏"}">
+            ${isFavoriteStore(item) ? "★" : "☆"}
+          </button>
+        </div>
+        <div class="map-result-meta">
+          <span class="meta-pill">${item.ratioGrade}</span>
+          <span class="meta-pill">評分 ${score}</span>
+          <span class="meta-pill">${item.category || "未分類"}</span>
+          <span class="meta-pill">${item.priceLevel || "未標價位"}</span>
+        </div>
+        <div class="map-result-actions">
+          <button type="button" data-focus-key="${key}">聚焦地圖</button>
+          ${item.gmapUrl ? `<a class="button-link secondary" href="${item.gmapUrl}" target="_blank" rel="noopener noreferrer">Google 導航</a>` : `<span class="button-link secondary">無導航連結</span>`}
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  if(result.length > preview.length){
+    list.innerHTML += `<div class="empty-card">目前先顯示前 ${preview.length} 間，地圖上仍保留全部符合條件的標記。</div>`;
+  }
+
+  list.querySelectorAll("[data-focus-key]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      focusStoreByKey(decodeURIComponent(btn.dataset.focusKey));
+    });
+  });
+
+  list.querySelectorAll("[data-favorite-key]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      toggleFavoriteByKey(decodeURIComponent(btn.dataset.favoriteKey));
+    });
+  });
+}
+
+function focusStoreByKey(storeKey){
+  const marker = markerLookup.get(storeKey);
+  const item = currentMapResults.find(entry => getStoreKey(entry) === storeKey);
+  if(marker && item){
+    map.setView([item.lat, item.lng], 16);
+    marker.openPopup();
+  }
+}
+
+async function shareMapState(){
+  syncMapUrlState();
+  const shareUrl = window.location.href;
+  try {
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(shareUrl);
+      alert("已複製目前地圖篩選連結");
+      return;
+    }
+  } catch (err) {
+    console.warn("複製連結失敗", err);
+  }
+  window.prompt("請複製這個連結：", shareUrl);
 }
 
 // 使用者定位
@@ -506,8 +734,10 @@ function locateMe(){
     let lat= pos.coords.latitude;
     let lng= pos.coords.longitude;
     map.setView([lat,lng], 14);
-    // optional: show a circle
-    L.circle([lat,lng],{
+    if(userCircle){
+      map.removeLayer(userCircle);
+    }
+    userCircle = L.circle([lat,lng],{
       radius: 200,
       color:"#007bff",
       fillColor:"#66c",

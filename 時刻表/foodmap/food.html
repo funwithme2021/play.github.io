@@ -127,6 +127,13 @@
         <label for="gradeSelect">等第</label>
         <select id="gradeSelect"></select>
       </div>
+      <div class="field">
+        <label for="favoriteSelect">收藏</label>
+        <select id="favoriteSelect">
+          <option value="" selected>全部</option>
+          <option value="favorites">只看收藏</option>
+        </select>
+      </div>
     </div>
 
     <div id="keywordContainer" class="field-grid" style="display:none;">
@@ -163,6 +170,8 @@
         <button id="searchBtn">查詢</button>
         <button id="resetBtn" class="button-secondary">重置篩選</button>
         <button id="nearestBtn">開啟定位 / 搜尋符合條件最近 20 間</button>
+        <button id="randomPickBtn" class="button-secondary">幫我選一間</button>
+        <button id="shareBtn" class="button-secondary">分享目前篩選</button>
       </div>
     </div>
   </section>
@@ -176,6 +185,8 @@
     </div>
 
     <div id="gradeSummary"></div>
+    <div id="resultInsights" class="insight-grid"></div>
+    <div id="randomPickResult" class="empty-card picked-card"></div>
 
     <div class="table-container">
       <table>
@@ -183,6 +194,7 @@
           <tr>
             <th style="width:50px;">排名</th>
             <th>店家</th>
+            <th style="width:72px;">收藏</th>
             <th class="score-col">平均分</th>
             <th class="grade-col">等第</th>
             <th class="dist-col">距離</th>
@@ -327,6 +339,107 @@ function populate(sel, arr, def){
   });
 }
 
+const FAVORITES_STORAGE_KEY = "foodmapFavorites";
+let favoriteKeys = loadFavoriteKeys();
+
+function getStoreKey(d){
+  return [d.storeName, d.city || "", d.district || ""].join("||");
+}
+
+function loadFavoriteKeys(){
+  try {
+    const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+
+function saveFavoriteKeys(){
+  try {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...favoriteKeys]));
+  } catch (err) {
+    console.warn("收藏清單無法寫入 localStorage", err);
+  }
+}
+
+function isFavoriteStore(d){
+  return favoriteKeys.has(getStoreKey(d));
+}
+
+function passesFavoriteFilter(d){
+  return document.getElementById("favoriteSelect").value !== "favorites" || isFavoriteStore(d);
+}
+
+function toggleFavoriteByKey(storeKey){
+  if(favoriteKeys.has(storeKey)){
+    favoriteKeys.delete(storeKey);
+  } else {
+    favoriteKeys.add(storeKey);
+  }
+  saveFavoriteKeys();
+  performSearch();
+}
+
+function applySearchModeUI(){
+  const isMode1 = getSearchMode() === "mode1";
+  document.getElementById("filterContainer").style.display = isMode1 ? "" : "none";
+  document.getElementById("keywordContainer").style.display = isMode1 ? "none" : "";
+}
+
+function buildSearchParams(){
+  const params = new URLSearchParams();
+  params.set("mode", getSearchMode());
+
+  const maybeSet = (key, value, defaultValue = "") => {
+    if(value && value !== defaultValue){
+      params.set(key, value);
+    }
+  };
+
+  maybeSet("city", document.getElementById("citySelect").value);
+  maybeSet("district", document.getElementById("districtSelect").value);
+  maybeSet("category", document.getElementById("categorySelect").value);
+  maybeSet("price", document.getElementById("priceSelect").value);
+  maybeSet("grade", document.getElementById("gradeSelect").value);
+  maybeSet("fav", document.getElementById("favoriteSelect").value);
+  maybeSet("keyword", document.getElementById("keywordInput").value.trim());
+  maybeSet("scale", document.getElementById("scoreScaleSelect").value, "100");
+  maybeSet("sort", document.getElementById("sortSelect").value, "desc");
+  maybeSet("pageSize", document.getElementById("pageSizeSelect").value, "20");
+  return params;
+}
+
+function syncUrlState(){
+  const url = new URL(window.location.href);
+  url.search = buildSearchParams().toString();
+  history.replaceState(null, "", url);
+}
+
+function applyUrlState(){
+  const params = new URLSearchParams(window.location.search);
+  if([...params.keys()].length === 0) return false;
+
+  const mode = params.get("mode") === "mode2" ? "mode2" : "mode1";
+  document.querySelector(`input[name="searchMode"][value="${mode}"]`).checked = true;
+  document.getElementById("citySelect").value = params.get("city") || "";
+  updateDistrictOptions();
+  document.getElementById("districtSelect").value = params.get("district") || "";
+  document.getElementById("categorySelect").value = params.get("category") || "";
+  document.getElementById("priceSelect").value = params.get("price") || "";
+  document.getElementById("gradeSelect").value = params.get("grade") || "";
+  document.getElementById("favoriteSelect").value = params.get("fav") === "favorites" ? "favorites" : "";
+  document.getElementById("keywordInput").value = params.get("keyword") || "";
+  document.getElementById("scoreScaleSelect").value = params.get("scale") === "5" ? "5" : "100";
+  document.getElementById("sortSelect").value = params.get("sort") === "asc" ? "asc" : "desc";
+
+  const pageSize = params.get("pageSize");
+  document.getElementById("pageSizeSelect").value = ["10","20","50"].includes(pageSize) ? pageSize : "20";
+  applySearchModeUI();
+  return true;
+}
+
 // 初始化
 function initSelectOptions(){
   populate(document.getElementById("citySelect"), distinct(foodData,"city"), "全部");
@@ -361,15 +474,16 @@ function filterByDropdown(data){
     if(cat && d.category!== cat) return false;
     if(pri && d.priceLevel!== pri) return false;
     if(grd && d.ratioGrade!== grd) return false;
+    if(!passesFavoriteFilter(d)) return false;
     return true;
   });
 }
 function filterByKeyword(data){
   let kw= document.getElementById("keywordInput").value.trim().toLowerCase();
-  if(!kw) return data;
+  if(!kw) return data.filter(d=> passesFavoriteFilter(d));
   return data.filter(d=>{
     let combo= (d.storeName + d.city + d.district + d.category + d.priceLevel).toLowerCase();
-    return combo.includes(kw);
+    return combo.includes(kw) && passesFavoriteFilter(d);
   });
 }
 function getSearchMode(){
@@ -400,6 +514,7 @@ function sortData(arr){
 let finalData= [];
 let currentPage=1;
 let pageSize=20;
+let currentPickedStoreKey= "";
 
 function performSearch(){
   // 動態等第
@@ -418,6 +533,7 @@ function performSearch(){
 
   finalData= result;
   currentPage=1;
+   syncUrlState();
   renderTablePage();
 }
 
@@ -447,6 +563,7 @@ function renderTablePage(){
     let tr= document.createElement("tr");
     let grade= d.ratioGrade;
     let score= getScoreText(d);
+    let storeKey = getStoreKey(d);
 
     // 排名
     let tdRank= document.createElement("td");
@@ -458,6 +575,18 @@ function renderTablePage(){
     link.href= `food-map.html?storeName=${encodeURIComponent(d.storeName)}`;
     link.textContent= d.storeName;
     tdStore.appendChild(link);
+
+    // 收藏
+    let tdFav= document.createElement("td");
+    let favBtn= document.createElement("button");
+    favBtn.type = "button";
+    favBtn.className = `favorite-btn${isFavoriteStore(d) ? " is-active" : ""}`;
+    favBtn.textContent = isFavoriteStore(d) ? "★" : "☆";
+    favBtn.title = isFavoriteStore(d) ? "取消收藏" : "加入收藏";
+    favBtn.addEventListener("click", ()=>{
+      toggleFavoriteByKey(storeKey);
+    });
+    tdFav.appendChild(favBtn);
 
     // 平均分 => 同色(依 grade)
     let tdScore= document.createElement("td");
@@ -508,17 +637,21 @@ function renderTablePage(){
     });
     tdNav.appendChild(navBtn);
 
-    tr.append(tdRank, tdStore, tdScore, tdGrade, tdDist, tdCity, tdCat, tdPrice, tdTime, tdNav);
+    tr.append(tdRank, tdStore, tdFav, tdScore, tdGrade, tdDist, tdCity, tdCat, tdPrice, tdTime, tdNav);
     tbody.appendChild(tr);
   });
 
   // 分頁
   let pageInfo= document.getElementById("pageInfo");
   let totalPage= Math.ceil(finalData.length / pageSize);
-  pageInfo.textContent= `第 ${currentPage} 頁 / 共 ${totalPage} 頁`;
+  pageInfo.textContent= totalPage > 0
+    ? `第 ${currentPage} 頁 / 共 ${totalPage} 頁`
+    : "第 0 頁 / 共 0 頁";
 
   // 更新等第分配統計
   updateGradeSummary();
+  renderResultInsights();
+  renderPickedStoreCard();
 }
 
 /** 顏色 class => grade-color-xxx **/
@@ -557,6 +690,125 @@ function updateGradeSummary(){
     parts.push(`${g}：${c} 筆(${pct}%)`);
   });
   summaryEl.textContent= parts.join("， ");
+}
+
+function renderResultInsights(){
+  const container = document.getElementById("resultInsights");
+  if(finalData.length===0){
+    container.innerHTML = `
+      <div class="insight-card">
+        <span class="insight-label">目前結果</span>
+        <span class="insight-value">0</span>
+        <span class="insight-note">調整條件後再試一次。</span>
+      </div>
+    `;
+    return;
+  }
+
+  const avgScore = finalData.reduce((sum, item)=> sum + computeSingleScore(item), 0) / finalData.length;
+  const displayScale = document.getElementById("scoreScaleSelect").value === "5"
+    ? `${(avgScore / 20).toFixed(2)} / 5`
+    : `${avgScore.toFixed(2)} / 100`;
+  const cityCountMap = {};
+  finalData.forEach(item => {
+    cityCountMap[item.city] = (cityCountMap[item.city] || 0) + 1;
+  });
+  const topCity = Object.entries(cityCountMap).sort((a,b)=> b[1] - a[1])[0];
+  const favoriteCount = finalData.filter(item => isFavoriteStore(item)).length;
+  const topStore = finalData[0];
+
+  container.innerHTML = `
+    <div class="insight-card">
+      <span class="insight-label">目前結果</span>
+      <span class="insight-value">${finalData.length}</span>
+      <span class="insight-note">${getSearchMode()==="mode1" ? "下拉式篩選" : "關鍵字搜尋"}模式</span>
+    </div>
+    <div class="insight-card">
+      <span class="insight-label">最高分店家</span>
+      <span class="insight-value">${topStore.storeName}</span>
+      <span class="insight-note">${topStore.city}｜${topStore.ratioGrade}</span>
+    </div>
+    <div class="insight-card">
+      <span class="insight-label">平均分</span>
+      <span class="insight-value">${displayScale}</span>
+      <span class="insight-note">${topCity ? `最多來自 ${topCity[0]}（${topCity[1]} 間）` : "尚無城市資料"}</span>
+    </div>
+    <div class="insight-card">
+      <span class="insight-label">收藏命中</span>
+      <span class="insight-value">${favoriteCount}</span>
+      <span class="insight-note">${favoriteCount > 0 ? "本次結果內含已收藏店家" : "目前結果尚未命中收藏"}</span>
+    </div>
+  `;
+}
+
+function pickRandomStore(){
+  if(finalData.length===0){
+    alert("目前沒有符合條件的店家可供抽選");
+    return;
+  }
+  const picked = finalData[Math.floor(Math.random() * finalData.length)];
+  currentPickedStoreKey = getStoreKey(picked);
+  renderPickedStoreCard();
+}
+
+function renderPickedStoreCard(){
+  const panel = document.getElementById("randomPickResult");
+  const picked = finalData.find(item => getStoreKey(item) === currentPickedStoreKey);
+
+  if(!picked){
+    currentPickedStoreKey = "";
+    panel.classList.remove("is-visible");
+    panel.innerHTML = "";
+    return;
+  }
+
+  const scoreText = document.getElementById("scoreScaleSelect").value === "5"
+    ? `${(computeSingleScore(picked) / 20).toFixed(2)} / 5`
+    : `${computeSingleScore(picked).toFixed(2)} / 100`;
+
+  panel.innerHTML = `
+    <div class="picked-card-header">
+      <div>
+        <span class="insight-label">今天就吃這間</span>
+        <div class="picked-card-title">${picked.storeName}</div>
+        <div class="picked-card-meta">
+          <span class="meta-pill">${picked.city}${picked.district ? `｜${picked.district}` : ""}</span>
+          <span class="meta-pill">${picked.category || "未分類"}</span>
+          <span class="meta-pill">${picked.priceLevel || "未標價位"}</span>
+          <span class="meta-pill">${picked.ratioGrade}｜${scoreText}</span>
+        </div>
+      </div>
+      <button type="button" id="pickedFavoriteBtn" class="favorite-btn${isFavoriteStore(picked) ? " is-active" : ""}" title="${isFavoriteStore(picked) ? "取消收藏" : "加入收藏"}">
+        ${isFavoriteStore(picked) ? "★" : "☆"}
+      </button>
+    </div>
+    <div class="picked-card-actions">
+      <button type="button" id="pickedAgainBtn">再抽一間</button>
+      <a class="button-link secondary" href="food-map.html?storeName=${encodeURIComponent(picked.storeName)}">前往地圖</a>
+      ${picked.gmapUrl ? `<a class="button-link secondary" href="${picked.gmapUrl}" target="_blank" rel="noopener noreferrer">Google 導航</a>` : ""}
+    </div>
+  `;
+  panel.classList.add("is-visible");
+
+  document.getElementById("pickedAgainBtn").addEventListener("click", pickRandomStore);
+  document.getElementById("pickedFavoriteBtn").addEventListener("click", ()=>{
+    toggleFavoriteByKey(getStoreKey(picked));
+  });
+}
+
+async function shareCurrentSearch(){
+  syncUrlState();
+  const shareUrl = window.location.href;
+  try {
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(shareUrl);
+      alert("已複製目前篩選連結");
+      return;
+    }
+  } catch (err) {
+    console.warn("複製連結失敗", err);
+  }
+  window.prompt("請複製這個連結：", shareUrl);
 }
 
 /* ========== 點擊平均分 => 細項popup ========== */
@@ -608,17 +860,18 @@ function resetSearch() {
   document.getElementById("categorySelect").value = "";
   document.getElementById("priceSelect").value = "";
   document.getElementById("gradeSelect").value = "";
+  document.getElementById("favoriteSelect").value = "";
   document.getElementById("keywordInput").value = "";
 
   // 分制、排序、每頁顯示選單也可以視需要重設
   document.getElementById("scoreScaleSelect").value = "100";
   document.getElementById("sortSelect").value = "desc";
   document.getElementById("pageSizeSelect").value = "20";
+  currentPickedStoreKey = "";
 
   // 如果預設要顯示「功能一」(下拉式)，將模式切回 mode1
   document.querySelector('input[name="searchMode"][value="mode1"]').checked = true;
-  document.getElementById("filterContainer").style.display = "";
-  document.getElementById("keywordContainer").style.display = "none";
+  applySearchModeUI();
 
   // 2) 重新執行搜尋 (或顯示全部)
   //    若您想直接顯示全部資料，也可以改為直接呼叫 renderTablePage()
@@ -669,25 +922,12 @@ function showNearest10(){
 document.addEventListener("DOMContentLoaded", ()=>{
   // 下拉
   initSelectOptions();
-  document.getElementById("citySelect").addEventListener("change", ()=>{
-    let cityVal= document.getElementById("citySelect").value;
-    let arr= foodData;
-    if(cityVal) arr= arr.filter(x=> x.city=== cityVal);
-    populate(document.getElementById("districtSelect"),
-      distinct(arr,"district"), "全部"
-    );
-  });
+  document.getElementById("citySelect").addEventListener("change", updateDistrictOptions);
 
   // Radio => 功能1 / 功能2
   document.querySelectorAll('input[name="searchMode"]').forEach(r=>{
     r.addEventListener("change",(e)=>{
-      if(e.target.value==="mode1"){
-        document.getElementById("filterContainer").style.display="";
-        document.getElementById("keywordContainer").style.display="none";
-      } else {
-        document.getElementById("filterContainer").style.display="none";
-        document.getElementById("keywordContainer").style.display="";
-      }
+      applySearchModeUI();
     });
   });
 
@@ -695,6 +935,28 @@ document.addEventListener("DOMContentLoaded", ()=>{
   document.getElementById("searchBtn").addEventListener("click", performSearch);
   document.getElementById("resetBtn").addEventListener("click", resetSearch);
   document.getElementById("nearestBtn").addEventListener("click", showNearest10);
+  document.getElementById("randomPickBtn").addEventListener("click", pickRandomStore);
+  document.getElementById("shareBtn").addEventListener("click", shareCurrentSearch);
+  document.getElementById("keywordInput").addEventListener("keydown", (evt)=>{
+    if(evt.key === "Enter"){
+      performSearch();
+    }
+  });
+  document.getElementById("scoreScaleSelect").addEventListener("change", ()=>{
+    renderTablePage();
+    syncUrlState();
+  });
+  document.getElementById("pageSizeSelect").addEventListener("change", ()=>{
+    currentPage = 1;
+    renderTablePage();
+    syncUrlState();
+  });
+  document.getElementById("sortSelect").addEventListener("change", ()=>{
+    finalData = sortData(finalData);
+    currentPage = 1;
+    renderTablePage();
+    syncUrlState();
+  });
 
   // 分頁
   document.getElementById("prevPageBtn").addEventListener("click",()=>{
@@ -718,7 +980,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
   });
 
   // 預設 => resetSearch => 顯示全部
-  resetSearch();
+  if(applyUrlState()){
+    performSearch();
+  } else {
+    resetSearch();
+  }
 });
 
 /* Google翻譯 (如需) */
