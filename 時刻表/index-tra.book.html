@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>台鐵訂票系統 Pro</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --font-main: 'Inter', 'Noto Sans TC', sans-serif;
+      --radius: 12px;
+      --transition: 0.2s ease;
+      
+      /* Colors */
+      --bg-body: #f0f2f5;
+      --bg-card: #ffffff;
+      --text-main: #1f2937;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #f59e0b;
+      --success: #10b981;
+      --danger: #ef4444;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    body.dark-mode {
+      --bg-body: #111827;
+      --bg-card: #1f2937;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --border: #374151;
+      --primary: #60a5fa;
+      --primary-hover: #3b82f6;
+      --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      font-family: var(--font-main);
+      background: var(--bg-body);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      padding: 0.8rem 1.5rem;
+      position: sticky; top: 0; z-index: 50;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .brand { font-weight: 800; font-size: 1.2rem; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+    .nav-tabs { display: flex; gap: 4px; background: var(--bg-body); padding: 4px; border-radius: 8px; }
+    .nav-tab {
+      padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+      color: var(--text-muted); transition: var(--transition);
+    }
+    .nav-tab.active { background: var(--bg-card); color: var(--primary); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    
+    .theme-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text-main);
+      padding: 6px 12px; border-radius: 8px; cursor: pointer;
+    }
+
+    /* Layout */
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; flex: 1; }
+    .grid-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
+    
+    /* Card Styles */
+    .card {
+      background: var(--bg-card); border-radius: var(--radius);
+      box-shadow: var(--shadow); border: 1px solid var(--border);
+      padding: 24px;
+    }
+    .section-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    
+    /* Form Elements */
+    .form-group { margin-bottom: 16px; }
+    .form-row { display: flex; gap: 12px; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+    
+    input, select {
+      width: 100%; padding: 10px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg-body); color: var(--text-main);
+      font-size: 0.95rem; outline: none; transition: var(--transition);
+    }
+    input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); }
+    
+    .radio-group { display: flex; gap: 4px; background: var(--bg-body); padding: 4px; border-radius: 8px; }
+    .radio-option { flex: 1; text-align: center; }
+    .radio-option input { display: none; }
+    .radio-option span {
+      display: block; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: var(--transition);
+    }
+    .radio-option input:checked + span { background: var(--bg-card); color: var(--primary); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+
+    button.btn-primary {
+      width: 100%; background: var(--primary); color: white; border: none;
+      padding: 12px; border-radius: 8px; font-weight: 600; font-size: 1rem;
+      cursor: pointer; transition: var(--transition);
+    }
+    button.btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+
+    /* --- Ticket Results (Cards) --- */
+    .ticket-list { display: flex; flex-direction: column; gap: 16px; }
+    .ticket-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 0; display: flex; transition: var(--transition); position: relative; overflow: hidden; flex-direction: column;
+    }
+    .ticket-card:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+    
+    .ticket-main { flex: 1; padding: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%; }
+    .ticket-action { 
+      width: 140px; background: var(--bg-body); border-left: 1px dashed var(--border);
+      display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 15px;
+    }
+
+    .t-info { display: flex; flex-direction: column; gap: 4px; }
+    .t-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .t-no { font-weight: 800; font-size: 1.1rem; color: var(--primary); }
+    .t-route { font-size: 0.9rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+    
+    .t-times { display: flex; align-items: center; gap: 15px; margin-top: 8px; }
+    .t-time { font-size: 1.4rem; font-weight: 800; color: var(--text-main); font-family: monospace; letter-spacing: -0.5px; }
+    .t-arrow { color: var(--text-muted); font-size: 1.2rem; }
+    .t-duration { 
+      font-size: 0.85rem; color: var(--text-muted); background: var(--bg-body); 
+      padding: 2px 8px; border-radius: 4px; margin-left: 10px; font-weight: 500;
+    }
+
+    .t-tag { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .tag-fast { background: #dcfce7; color: #166534; }
+    .tag-rec { background: #fff7ed; color: #9a3412; }
+
+    /* Utilization Bar */
+    .util-container { width: 100%; margin-bottom: 10px; }
+    .util-label { font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .util-bar-bg { width: 100%; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+    .util-bar-fill { height: 100%; border-radius: 3px; }
+
+    /* --- Availability List (餘票查詢) --- */
+    .avail-row {
+      padding: 15px 20px; border-top: 1px solid var(--border); background: var(--bg-body);
+      overflow-x: auto; display: flex; gap: 10px; align-items: center;
+    }
+    .avail-title { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); white-space: nowrap; margin-right: 10px; }
+    
+    .avail-item {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px;
+      padding: 6px 12px; display: flex; align-items: center; gap: 8px; white-space: nowrap;
+      cursor: pointer; transition: var(--transition);
+    }
+    .avail-item:hover { transform: translateY(-2px); border-color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    /* 修正：無票時樣式 */
+    .avail-item.disabled { opacity: 0.6; cursor: not-allowed; border-color: transparent; background: rgba(0,0,0,0.05); }
+    .avail-item.disabled:hover { transform: none; box-shadow: none; }
+    
+    .av-st { font-size: 0.9rem; font-weight: 600; }
+    .av-status { font-size: 0.9rem; font-weight: 800; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: #fff; }
+    
+    .status-o { background: var(--success); } /* O */
+    .status-t { background: var(--accent); }  /* Triangle */
+    .status-x { background: var(--danger); }  /* X */
+
+    /* --- My Tickets (Wallet Style) --- */
+    .wallet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+    .my-ticket {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      position: relative; overflow: hidden; box-shadow: var(--shadow);
+      display: flex; flex-direction: column;
+    }
+    .mt-top {
+      background: linear-gradient(135deg, var(--primary) 0%, #1e40af 100%);
+      padding: 15px 20px; color: white; display: flex; justify-content: space-between; align-items: center;
+    }
+    .mt-top h3 { margin: 0; font-size: 1.1rem; }
+    .mt-code { font-family: monospace; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.9rem; }
+    .mt-body { padding: 20px; }
+    .mt-route { font-size: 1.2rem; font-weight: 800; display: flex; justify-content: space-between; margin-bottom: 10px; }
+    .mt-time-row { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px; border-bottom: 1px dashed var(--border); padding-bottom: 15px; }
+    .mt-seats { background: var(--bg-body); padding: 10px; border-radius: 8px; font-size: 0.9rem; font-weight: 500; color: var(--text-main); }
+    .mt-actions { padding: 10px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+    .btn-danger-ghost { background: transparent; color: var(--danger); border: none; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+
+    /* Badge Styles */
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; color: #fff; background: #6b7280; margin-right: 5px; }
+    .badge.zq { background: #ef4444; } .badge.pym { background: #db2777; } .badge.xzq { background: #8b5cf6; }
+
+    /* Modal */
+    .modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 1000;
+      justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s;
+    }
+    .modal.show { opacity: 1; }
+    .modal-content {
+      background: var(--bg-card); padding: 30px; border-radius: 16px; width: 90%; max-width: 400px;
+      transform: translateY(20px); transition: transform 0.3s; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    .modal.show .modal-content { transform: translateY(0); }
+
+    /* Toast */
+    .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 10px; }
+    .toast {
+      background: var(--bg-card); color: var(--text-main); padding: 12px 20px; border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-left: 4px solid var(--primary);
+      transform: translateX(100%); transition: transform 0.3s; font-weight: 500;
+    }
+    .toast.show { transform: translateX(0); }
+    .toast.error { border-left-color: var(--danger); }
+    .toast.success { border-left-color: var(--success); }
+
+    @media (max-width: 768px) {
+      .grid-layout { grid-template-columns: 1fr; }
+      .ticket-main { flex-direction: column; align-items: flex-start; }
+      .ticket-action { width: 100%; border-left: none; border-top: 1px dashed var(--border); flex-direction: row; justify-content: space-between; }
+      .util-container { width: 60%; margin-bottom: 0; }
+      .ticket-right { width: 100%; margin-top: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="brand">🚄 台鐵訂票系統 Pro+</div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="switchTab('booking')">線上訂票</div>
+    <div class="nav-tab" onclick="switchTab('availability')">餘票查詢</div>
+    <div class="nav-tab" onclick="switchTab('wallet')">我的車票</div>
+  </div>
+  <button class="theme-btn" onclick="toggleDarkMode()">◑</button>
+</nav>
+
+<div class="container">
+  
+  <div id="view-booking" class="grid-layout">
+    <div class="card">
+      <h2 class="section-title">行程搜尋</h2>
+      <form id="booking-form">
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>出發站</label>
+            <select id="departure-station" required></select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>抵達站</label>
+            <select id="arrival-station" required></select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>日期</label>
+            <input type="date" id="date" required />
+          </div>
+          <div class="form-group" style="width: 80px;">
+            <label>張數</label>
+            <input type="number" id="ticket-quantity" min="1" max="6" value="1" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>查詢方式</label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="booking-method" value="train-number" checked>
+              <span>依車次</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="booking-method" value="time-slot">
+              <span>依時段</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="train-number-section">
+          <div class="form-group">
+            <label>車次號碼</label>
+            <input type="text" id="train-number" placeholder="例如: 408" />
+          </div>
+        </div>
+
+        <div id="time-slot-section" style="display:none">
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label>起始時間</label>
+              <input type="time" id="start-time" value="06:00" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>結束時間</label>
+              <input type="time" id="end-time" value="23:59" />
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">🔍 查詢列車</button>
+      </form>
+    </div>
+
+    <div class="ticket-list" id="results-list">
+      <div style="text-align:center; padding: 60px; color: var(--text-muted);">
+        <div style="font-size:3rem; margin-bottom:10px">🎫</div>
+        請輸入左側行程資訊進行查詢
+      </div>
+    </div>
+  </div>
+
+  <div id="view-availability" class="hidden" style="display:none">
+    <div class="card" style="margin-bottom:20px">
+      <h2 class="section-title">餘票查詢 (各站狀態)</h2>
+      <div class="form-row">
+        <div class="form-group" style="flex:1">
+          <label>出發站</label>
+          <select id="av-departure" onchange="updateAvResults()"></select>
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>抵達站 (區間終點)</label>
+          <select id="av-arrival" onchange="updateAvResults()"></select>
+        </div>
+        <div class="form-group">
+          <label>日期</label>
+          <input type="date" id="av-date" value="" onchange="updateAvResults()">
+        </div>
+      </div>
+      <p style="color:var(--text-muted); font-size:0.9rem">💡 符號說明： <span style="color:var(--success)">●</span> 座位充裕 <span style="color:var(--accent)">▲</span> 座位緊張 <span style="color:var(--danger)">✖</span> 已無座位</p>
+    </div>
+    
+    <div class="ticket-list" id="av-results-list"></div>
+  </div>
+
+  <div id="view-wallet" style="display:none">
+    <h2 class="section-title">我的車票夾</h2>
+    <div id="wallet-list" class="wallet-grid"></div>
+  </div>
+
+</div>
+
+<div id="seatModal" class="modal">
+  <div class="modal-content">
+    <h3 style="margin-bottom:15px; color:var(--text-main)">座位偏好設定</h3>
+    <p id="modal-train-info" style="color:var(--text-muted); margin-bottom:20px; font-size:0.9rem"></p>
+    
+    <div class="form-group">
+      <label>座位位置</label>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="seat-pref" value="window" checked>
+          <span>靠窗</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="seat-pref" value="aisle">
+          <span>走道</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="seat-pref" value="any">
+          <span>不拘</span>
+        </label>
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="processBooking()">確認訂票</button>
+    <button style="width:100%; margin-top:10px; background:transparent; border:none; color:var(--text-muted); cursor:pointer; padding:10px" onclick="closeModal()">取消</button>
+  </div>
+</div>
+
+<div id="successModal" class="modal">
+  <div class="modal-content" style="text-align:center">
+    <div style="font-size:3rem; margin-bottom:10px">🎉</div>
+    <h3 style="color:var(--text-main)">訂票成功！</h3>
+    <p style="color:var(--text-muted); margin: 10px 0 20px;">車票已存入您的票夾。</p>
+    <div id="success-ticket-preview" style="background:var(--bg-body); padding:15px; border-radius:8px; margin-bottom:20px; text-align:left; font-size:0.9rem; border-left: 4px solid var(--success);">
+      </div>
+    <button class="btn-primary" onclick="closeSuccessModal()">前往查看車票</button>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="train-schedule.js"></script>
+
+<script>
+  /***** 1. 核心邏輯 (保留不變) *****/
+  var stationMaxCapacities = {
+    '新自強': 638, '普悠瑪': 406, '自強號(新)': 906, '自強號': 866,
+    '莒光號': 1000, '復興號': 1000, '區間快': 1700, '區間車': 1700, '加班車': 638
+  };
+  var popularityWeights = {
+    '普悠瑪': 2.35, '新自強': 2.2, '加班車': 2.4, '自強號(新)': 4.3,
+    '自強號': 3.2, '莒光號': 3.0, '復興號': 3.35, '區間快': 5.85, '區間車': 5.65
+  };
+  var timeWeights = {
+    'short_peak': 4.0, 'short_offpeak': 2.0, 'long_peak': 6.0, 'long_offpeak': 2.0
+  };
+  var stationDensity = {
+    '基隆': 110, '南港': 110, '松山': 120, '臺北': 130, '萬華': 130, '板橋': 135,
+    '桃園': 140, '中壢': 140, '新竹': 140, '苗栗': 60, '豐原': 110, '臺中': 160,
+    '彰化': 100, '員林': 90, '斗六': 70, '嘉義': 130, '新營': 80, '臺南': 135,
+    '新左營': 120, '高雄': 150, '鳳山': 95, '屏東': 70, '潮州': 70, '宜蘭': 110,
+    '羅東': 110, '花蓮': 150, '玉里': 100, '臺東': 150,
+  };
+
+  function normalizeStationName(name) { return name; }
+
+  function calculateTimeWeight(time) {
+    var hour = parseInt(time.split(':')[0], 10);
+    if ((hour >= 6 && hour < 9.5) || (hour >= 12 && hour < 13) ||
+        (hour >= 16 && hour < 20) || (hour >= 21 && hour < 22)) return timeWeights['short_peak'];
+    if ((hour >= 6.5 && hour < 10) || (hour >= 16 && hour < 20.5) ||
+        (hour >= 0.5 && hour < 4.5)) return timeWeights['long_peak'];
+    return timeWeights['short_offpeak'];
+  }
+
+  function getRandomFactor(trainType) {
+    if (['普悠瑪', '新自強', '自強號', '自強號(新)', '莒光號'].includes(trainType)) {
+      return (Math.random() * 0.15) - 0.1;
+    } else {
+      return (Math.random() * 0.22) - 0.1;
+    }
+  }
+
+  function calculateStationUtilizationRate(train, station, time) {
+    var maxCapacityPerTrain = stationMaxCapacities[train['車種']] || 110; 
+    var popularityWeight = popularityWeights[train['車種']] || 1;
+    var timeWeight = calculateTimeWeight(time);
+    var baseDensity = stationDensity[station] || 50;
+    var load = 0;
+    for (var i = 0; i < 3; i++) {
+      load += baseDensity * timeWeight * popularityWeight * (1 + getRandomFactor(train['車種']));
+    }
+    var averageLoad = load / 3;
+    var utilizationRate = Math.min(Math.max((averageLoad / maxCapacityPerTrain) * 50, 0), 100);
+    return utilizationRate.toFixed(2) + '%';
+  }
+
+  function getStopTime(train, station) {
+    const stop = train['車站時間'].find(s => normalizeStationName(s[0]) === station);
+    return stop ? stop[1] : '';
+  }
+
+  function isAvailable(train, departure, arrival, quantity) {
+    const stops = train['車站時間'];
+    const departureStop = stops.find(stop => normalizeStationName(stop[0]) === departure);
+    const arrivalStop = stops.find(stop => normalizeStationName(stop[0]) === arrival);
+    if (!departureStop || !arrivalStop) return false;
+    const departureTime = departureStop[1];
+    const utilizationRate = calculateStationUtilizationRate(train, departure, departureTime);
+    const utilizationValue = parseFloat(utilizationRate.replace('%', ''));
+    const maxCapacity = stationMaxCapacities[train['車種']] || 110;
+    const extraLoad = (quantity / maxCapacity) * 100;
+    return (utilizationValue + extraLoad) <= 100;
+  }
+
+  /***** 2. UI 互動與輔助函式 *****/
+  function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
+  document.getElementById('date').valueAsDate = new Date();
+  document.getElementById('av-date').valueAsDate = new Date();
+
+  // 載入車站
+  const depSel = document.getElementById('departure-station');
+  const arrSel = document.getElementById('arrival-station');
+  const avDepSel = document.getElementById('av-departure');
+  const avArrSel = document.getElementById('av-arrival');
+
+  if(typeof stations !== 'undefined') {
+    stations.forEach(s => {
+      depSel.add(new Option(s, s));
+      arrSel.add(new Option(s, s));
+      avDepSel.add(new Option(s, s));
+      avArrSel.add(new Option(s, s));
+    });
+    if(stations.includes('臺北')) { depSel.value='臺北'; avDepSel.value='臺北'; }
+    if(stations.includes('高雄')) { arrSel.value='高雄'; avArrSel.value='高雄'; }
+  }
+
+  // 分頁切換
+  function switchTab(tab) {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    // active state needs index finding or just manual setting
+    const tabs = ['booking', 'availability', 'wallet'];
+    document.querySelectorAll('.nav-tab')[tabs.indexOf(tab)].classList.add('active');
+    
+    document.getElementById('view-booking').style.display = tab==='booking'?'grid':'none';
+    document.getElementById('view-availability').style.display = tab==='availability'?'block':'none';
+    document.getElementById('view-wallet').style.display = tab==='wallet'?'block':'none';
+    
+    if(tab === 'wallet') renderWallet();
+    if(tab === 'availability') updateAvResults();
+  }
+
+  // 表單切換
+  const form = document.getElementById('booking-form');
+  form.addEventListener('change', e => {
+    if(e.target.name === 'booking-method') {
+      const isNum = e.target.value === 'train-number';
+      document.getElementById('train-number-section').style.display = isNum ? 'block' : 'none';
+      document.getElementById('time-slot-section').style.display = isNum ? 'none' : 'block';
+    }
+  });
+
+  function getDurationMinutes(t1, t2) {
+    const [h1, m1] = t1.split(':').map(Number);
+    const [h2, m2] = t2.split(':').map(Number);
+    let min1 = h1*60 + m1;
+    let min2 = h2*60 + m2;
+    if(min2 < min1) min2 += 1440;
+    return min2 - min1;
+  }
+  function formatDuration(minutes) {
+    const h = Math.floor(minutes/60);
+    const m = minutes%60;
+    return h > 0 ? `${h}小時${m}分` : `${m}分`;
+  }
+
+  // 渲染搜尋結果
+  function renderResults(list, dept, arrv) {
+    const container = document.getElementById('results-list');
+    container.innerHTML = '';
+    
+    if(list.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted)">找不到符合條件的列車</div>';
+      return;
+    }
+
+    const minDuration = Math.min(...list.map(i => i.duration));
+
+    list.forEach(item => {
+      const { no, data, dTime, aTime, duration, utilVal, utilStr } = item;
+      
+      let barColor = '#10b981';
+      let btnText = '預訂';
+      let btnDisabled = false;
+      
+      if(utilVal >= 100) { barColor = '#ef4444'; btnText = '已滿'; btnDisabled = true; }
+      else if(utilVal > 80) { barColor = '#f59e0b'; }
+
+      let badgeClass = 'qj';
+      if (data['車種'].includes('自強')) badgeClass = 'zq';
+      if (data['車種'].includes('普悠瑪')) badgeClass = 'pym';
+      if (data['車種'].includes('新自強')) badgeClass = 'xzq';
+
+      let tagsHtml = '';
+      if(duration === minDuration) tagsHtml += `<span class="t-tag tag-fast">⚡ 最快</span> `;
+      if(utilVal < 50 && duration <= minDuration + 15) tagsHtml += `<span class="t-tag tag-rec">★ 推薦</span>`;
+
+      const el = document.createElement('div');
+      el.className = 'ticket-card';
+      el.innerHTML = `
+        <div class="ticket-main" style="flex-direction:row">
+          <div class="t-info">
+            <div class="t-header">
+              <span class="badge ${badgeClass}">${data['車種']}</span>
+              <span class="t-no">${no} 次</span>
+              ${tagsHtml}
+            </div>
+            <div class="t-times">
+              <div class="t-time">${dTime}</div>
+              <div class="t-arrow">➝</div>
+              <div class="t-time">${aTime}</div>
+              <div class="t-duration">${formatDuration(duration)}</div>
+            </div>
+            <div class="t-route">${dept} 到 ${arrv}</div>
+          </div>
+          <div class="ticket-action">
+            <div class="util-container">
+              <div class="util-label">
+                <span>座位運用率</span>
+                <span>${utilVal.toFixed(0)}%</span>
+              </div>
+              <div class="util-bar-bg">
+                <div class="util-bar-fill" style="width:${Math.min(utilVal, 100)}%; background:${barColor}"></div>
+              </div>
+            </div>
+            <button class="btn-primary" style="width:100%; padding:8px; opacity:${btnDisabled?0.5:1}" 
+              onclick="openBookingModal('${no}', '${data['車種']}', '${dept}', '${arrv}', '${dTime}', '${aTime}')">
+              ${btnText}
+            </button>
+          </div>
+        </div>
+      `;
+      container.appendChild(el);
+    });
+  }
+
+  // 搜尋按鈕
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const dept = depSel.value;
+    const arrv = arrSel.value;
+    if(dept === arrv) { showToast('出發與抵達站不能相同', 'error'); return; }
+
+    const method = document.querySelector('input[name="booking-method"]:checked').value;
+    let results = [];
+
+    if(method === 'train-number') {
+      const no = document.getElementById('train-number').value.trim();
+      if(trainSchedule[no]) {
+        const train = trainSchedule[no];
+        const stops = train['車站時間'];
+        const departureStop = stops.find(stop => normalizeStationName(stop[0]) === dept);
+        const arrivalStop = stops.find(stop => normalizeStationName(stop[0]) === arrv);
+
+        if(departureStop && arrivalStop && stops.indexOf(departureStop) < stops.indexOf(arrivalStop)) {
+           const depTime = departureStop[1];
+           const arrTime = arrivalStop[1];
+           const utilStr = calculateStationUtilizationRate(train, dept, depTime);
+           const utilVal = parseFloat(utilStr.replace('%', ''));
+           results.push({ no, data: train, dTime: depTime, aTime: arrTime, duration: getDurationMinutes(depTime, arrTime), utilVal, utilStr });
+        }
+      }
+    } else {
+      const tStart = document.getElementById('start-time').value;
+      const tEnd = document.getElementById('end-time').value;
+      
+      Object.keys(trainSchedule).forEach(no => {
+        const train = trainSchedule[no];
+        if(['區間車','區間快'].includes(train['車種'])) return;
+        const stops = train['車站時間'];
+        const departureStop = stops.find(stop => normalizeStationName(stop[0]) === dept);
+        if (!departureStop) return;
+        const depTime = departureStop[1];
+        if(depTime >= tStart && depTime <= tEnd) {
+           const arrivalStop = stops.find(stop => normalizeStationName(stop[0]) === arrv);
+           if(arrivalStop && stops.indexOf(departureStop) < stops.indexOf(arrivalStop)) {
+             const arrTime = arrivalStop[1];
+             const utilStr = calculateStationUtilizationRate(train, dept, depTime);
+             const utilVal = parseFloat(utilStr.replace('%', ''));
+             results.push({ no, data: train, dTime: depTime, aTime: arrTime, duration: getDurationMinutes(depTime, arrTime), utilVal, utilStr });
+           }
+        }
+      });
+      results.sort((a,b) => a.dTime.localeCompare(b.dTime));
+    }
+    renderResults(results, dept, arrv);
+  };
+
+  // === NEW: Availability View ===
+  function updateAvResults() {
+    const dept = avDepSel.value;
+    const arrv = avArrSel.value;
+    const list = document.getElementById('av-results-list');
+    list.innerHTML = '';
+
+    if(dept === arrv) {
+        list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted)">請選擇不同的起訖站</div>';
+        return;
+    }
+
+    const results = [];
+    Object.keys(trainSchedule).forEach(no => {
+        const train = trainSchedule[no];
+        if(['區間車','區間快'].includes(train['車種'])) return;
+        
+        const stops = train['車站時間'];
+        const sIdx = stops.findIndex(s => s[0] === dept);
+        const eIdx = stops.findIndex(s => s[0] === arrv);
+
+        if(sIdx !== -1 && eIdx !== -1 && sIdx < eIdx) {
+            const segmentStatuses = [];
+            for(let i = sIdx + 1; i <= eIdx; i++) {
+                const stopName = stops[i][0];
+                const stopTime = stops[i][1];
+                
+                // ★★★ 關鍵修正：檢查是否有位 ★★★
+                const hasSeat = isAvailable(train, dept, stopName, 1);
+                
+                // Visual util for color (optional)
+                const utilStr = calculateStationUtilizationRate(train, dept, stops[sIdx][1]); 
+                const utilVal = parseFloat(utilStr.replace('%', ''));
+                const variance = (Math.random() * 20) - 10; 
+                let finalUtil = utilVal + variance;
+                finalUtil = Math.max(0, Math.min(100, finalUtil));
+
+                let status = 'o';
+                if(!hasSeat) status = 'x'; // 優先使用 isAvailable 判斷
+                else if(finalUtil > 90) status = 'x'; 
+                else if(finalUtil > 60) status = 't';
+
+                segmentStatuses.push({ name: stopName, status: status, time: stopTime });
+            }
+            results.push({ no, data: train, dTime: stops[sIdx][1], segments: segmentStatuses });
+        }
+    });
+
+    results.sort((a,b) => a.dTime.localeCompare(b.dTime));
+
+    results.forEach(r => {
+        const el = document.createElement('div');
+        el.className = 'ticket-card';
+        el.style.flexDirection = 'column';
+        el.style.alignItems = 'flex-start';
+        
+        let badgeClass = 'qj';
+        if (r.data['車種'].includes('自強')) badgeClass = 'zq';
+        if (r.data['車種'].includes('普悠瑪')) badgeClass = 'pym';
+        
+        // Segments HTML
+        let segHtml = r.segments.map(s => {
+            const icon = s.status === 'o' ? '●' : (s.status === 't' ? '▲' : '✖');
+            const cls = `status-${s.status}`;
+            const disabledClass = s.status === 'x' ? 'disabled' : '';
+            return `
+                <div class="avail-item ${disabledClass}" onclick="openBookingModal('${r.no}', '${r.data['車種']}', '${dept}', '${s.name}', '${r.dTime}', '${s.time}')">
+                    <span class="av-st">${s.name}</span>
+                    <span class="av-status ${cls}">${icon}</span>
+                </div>
+            `;
+        }).join('');
+
+        el.innerHTML = `
+            <div style="padding:15px 20px; width:100%; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-weight:700; font-size:1.1rem; color:var(--primary)">
+                    <span class="badge ${badgeClass}">${r.data['車種']}</span> ${r.no} 次
+                </div>
+                <div style="font-weight:700; font-family:monospace; font-size:1.2rem;">${r.dTime} 出發</div>
+            </div>
+            <div class="avail-row" style="width:100%">
+                <div class="avail-title">到各站餘票：</div>
+                ${segHtml}
+            </div>
+        `;
+        list.appendChild(el);
+    });
+  }
+
+  // === 3. 訂票流程 ===
+  let pendingBooking = null;
+
+  function openBookingModal(no, type, dept, arrv, dTime, aTime) {
+    const qty = 1; // 預設檢查1張
+    const train = trainSchedule[no];
+    
+    // ★★★ 新增檢查：點擊時再次確認是否有位 ★★★
+    if(!isAvailable(train, dept, arrv, qty)) {
+      showToast('很抱歉，該區間已無餘票 (座位已滿)', 'error');
+      return;
+    }
+
+    pendingBooking = { no, type, dept, arrv, dTime, aTime, qty };
+    document.getElementById('modal-train-info').innerText = `${type} ${no}次 ｜ ${dept} ${dTime} ➝ ${arrv} ${aTime}`;
+    const modal = document.getElementById('seatModal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('show'), 10);
+  }
+
+  function closeModal() {
+    const modal = document.getElementById('seatModal');
+    modal.classList.remove('show');
+    setTimeout(() => modal.style.display = 'none', 300);
+    pendingBooking = null;
+  }
+
+  function processBooking() {
+    if(!pendingBooking) return;
+    
+    // 如果是從主頁進來，這裡會抓到 quantity；如果是餘票頁，就是 1
+    const formQty = parseInt(document.getElementById('ticket-quantity').value);
+    const qty = pendingBooking.qty > 1 ? pendingBooking.qty : (formQty || 1);
+
+    const pref = document.querySelector('input[name="seat-pref"]:checked').value;
+    const seats = [];
+    for(let i=0; i<qty; i++) {
+      const car = Math.floor(Math.random()*8)+1;
+      const seatNum = Math.floor(Math.random()*50)+1;
+      const pos = pref==='window' ? '靠窗' : (pref==='aisle'?'走道':'');
+      seats.push(`${car}車 ${seatNum}號 ${pos}`);
+    }
+
+    const ticket = {
+      id: Date.now(),
+      ...pendingBooking,
+      qty: qty,
+      date: document.getElementById('date').value,
+      seats: seats,
+      code: Math.floor(Math.random()*900000)+100000
+    };
+
+    const wallet = JSON.parse(localStorage.getItem('myTickets') || '[]');
+    wallet.push(ticket);
+    localStorage.setItem('myTickets', JSON.stringify(wallet));
+
+    closeModal();
+    
+    document.getElementById('success-ticket-preview').innerHTML = `
+      <div style="font-size:1.1rem; font-weight:bold; margin-bottom:5px">${ticket.date}</div>
+      <div>${ticket.no}次 ${ticket.type}</div>
+      <div style="margin:5px 0; color:var(--primary); font-weight:bold;">${ticket.dept} ${ticket.dTime} ➝ ${ticket.arrv} ${ticket.aTime}</div>
+      <div>張數：${qty} 張</div>
+      <div style="margin-top:5px; font-family:monospace; background:rgba(0,0,0,0.05); padding:4px;">訂位代碼：${ticket.code}</div>
+    `;
+    const sm = document.getElementById('successModal');
+    sm.style.display = 'flex';
+    setTimeout(() => sm.classList.add('show'), 10);
+  }
+
+  function closeSuccessModal() {
+    const sm = document.getElementById('successModal');
+    sm.classList.remove('show');
+    setTimeout(() => sm.style.display = 'none', 300);
+    switchTab('wallet');
+  }
+
+  function renderWallet() {
+    const container = document.getElementById('wallet-list');
+    const wallet = JSON.parse(localStorage.getItem('myTickets') || '[]');
+    
+    if(wallet.length === 0) {
+      container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--text-muted)">目前沒有有效車票</div>';
+      return;
+    }
+    wallet.sort((a,b) => b.id - a.id);
+
+    container.innerHTML = wallet.map(t => `
+      <div class="my-ticket">
+        <div class="mt-top">
+          <h3>${t.type} ${t.no}次</h3>
+          <span class="mt-code">#${t.code}</span>
+        </div>
+        <div class="mt-body">
+          <div class="mt-route">
+            <span>${t.dept}</span>
+            <span style="color:var(--text-muted); font-size:1rem">➝</span>
+            <span>${t.arrv}</span>
+          </div>
+          <div class="mt-time-row">
+            <span>${t.date}</span>
+            <span>${t.dTime} 開 / ${t.aTime} 到</span>
+          </div>
+          <div class="mt-seats">
+            ${t.seats.join('<br>')}
+          </div>
+        </div>
+        <div class="mt-actions">
+          <button class="btn-danger-ghost" onclick="removeTicket(${t.id})">退票</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.removeTicket = function(id) {
+    if(!confirm('確定要退票嗎？此操作無法復原。')) return;
+    let wallet = JSON.parse(localStorage.getItem('myTickets') || '[]');
+    wallet = wallet.filter(t => t.id !== id);
+    localStorage.setItem('myTickets', JSON.stringify(wallet));
+    renderWallet();
+    showToast('退票成功', 'success');
+  }
+
+  function showToast(msg, type='info') {
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.textContent = msg;
+    document.getElementById('toastContainer').appendChild(t);
+    setTimeout(() => t.classList.add('show'), 10);
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3000);
+  }
+</script>
+</body>
+</html>

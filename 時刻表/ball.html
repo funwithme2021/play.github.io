@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>骰子比賽</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 80%;
+            margin: auto;
+            overflow: hidden;
+            background-color: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #333;
+        }
+        #player-form {
+            margin: 20px 0;
+            text-align: center;
+        }
+        #player-form input {
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #player-form button {
+            padding: 8px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #player-form button:hover {
+            background-color: #0056b3;
+        }
+        #players {
+            margin-top: 20px;
+        }
+        .player {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #f9f9f9;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .player input {
+            width: 50px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .player button {
+            padding: 6px 12px;
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .player button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .player button:hover {
+            background-color: #218838;
+        }
+        .player-status {
+            color: gray;
+        }
+        #rankings {
+            margin-top: 20px;
+        }
+        #rankings h3 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .rankings-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .rankings-table th, .rankings-table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+        .highlight {
+            font-weight: bold;
+            color: red;
+        }
+        #final-ranking {
+            display: none;
+        }
+        .final-rankings-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .final-rankings-table th, .final-rankings-table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>骰子比賽</h1>
+        <div id="player-form">
+            <label for="player-name">選手名稱:</label>
+            <input type="text" id="player-name">
+            <button onclick="addPlayer()">添加選手</button>
+        </div>
+        <div id="round-section">
+            <h2 id="round-title">第一輪</h2>
+            <div id="players"></div>
+            <button onclick="nextRound()" id="next-round-btn">下一輪</button>
+        </div>
+        <div id="rankings">
+            <h3>目前排名</h3>
+            <table class="rankings-table">
+                <thead>
+                    <tr>
+                        <th>名次</th>
+                        <th>選手名稱</th>
+                        <th>總分</th>
+                    </tr>
+                </thead>
+                <tbody id="rankings-body"></tbody>
+            </table>
+        </div>
+        <div id="final-ranking">
+            <h2>最終排名</h2>
+            <table class="final-rankings-table">
+                <thead>
+                    <tr>
+                        <th>名次</th>
+                        <th>選手名稱</th>
+                        <th>總分</th>
+                    </tr>
+                </thead>
+                <tbody id="final-rankings-body"></tbody>
+            </table>
+        </div>
+        <button onclick="displayFinalRankings()" id="final-rankings-btn" style="display: none;">顯示最終排名表</button>
+    </div>
+    <script>
+        let players = [];
+        let currentRound = 1;
+        let roundConfirmed = false;
+
+        function addPlayer() {
+            if (currentRound > 2) return;
+
+            const playerName = document.getElementById('player-name').value;
+            if (playerName.trim() === "") return;
+
+            players.push({
+                name: playerName,
+                scores: [],
+                totalScore: 0,
+                roundScore: 0,
+                eliminated: false,
+                hasConfirmed: false
+            });
+
+            document.getElementById('player-name').value = "";
+            renderPlayers();
+        }
+
+        function renderPlayers() {
+            const playersDiv = document.getElementById('players');
+            playersDiv.innerHTML = "";
+            players.forEach((player, index) => {
+                const playerDiv = document.createElement('div');
+                playerDiv.classList.add('player');
+                playerDiv.innerHTML = `
+                    <span ${player.eliminated ? 'style="color: red;"' : ''}>${player.name}</span>
+                    ${!roundConfirmed && !player.eliminated ? `
+                        <input type="number" id="score-${index}-1" min="1" max="6" ${player.hasConfirmed ? 'disabled' : ''}>
+                        <input type="number" id="score-${index}-2" min="1" max="6" ${player.hasConfirmed ? 'disabled' : ''}>
+                        <input type="number" id="score-${index}-3" min="1" max="6" ${player.hasConfirmed ? 'disabled' : ''}>
+                        <input type="number" id="score-${index}-4" min="1" max="6" ${player.hasConfirmed ? 'disabled' : ''}>
+                        <button onclick="updateScore(${index})" ${player.hasConfirmed ? 'disabled' : ''}>完成輸入</button>
+                    ` : player.eliminated ? `
+                        <span class="player-status">已淘汰</span>
+                    ` : `
+                        <span>總分: ${player.totalScore}</span>
+                    `}
+                `;
+                playersDiv.appendChild(playerDiv);
+            });
+            if (roundConfirmed && (currentRound === 1 || currentRound === 2)) {
+                displayRankings();
+            }
+        }
+
+        function updateScore(index) {
+            if (players[index].hasConfirmed || players[index].eliminated) return;
+
+            const scores = [];
+            for (let i = 1; i <= 4; i++) {
+                const scoreInput = document.getElementById(`score-${index}-${i}`);
+                const score = parseInt(scoreInput.value);
+                if (isNaN(score) || score < 1 || score > 6) return;
+                scores.push(score);
+            }
+
+            const bonus = calculateBonus(scores);
+            const roundScore = scores.reduce((a, b) => a + b, 0) + bonus;
+
+            players[index].scores.push(roundScore);
+            players[index].roundScore = roundScore;
+            players[index].totalScore += roundScore;
+            players[index].hasConfirmed = true;
+
+            renderPlayers();
+        }
+
+        function calculateBonus(scores) {
+            const countMap = scores.reduce((acc, val) => {
+                acc[val] = (acc[val] || 0) + 1;
+                return acc;
+            }, {});
+
+            const values = Object.values(countMap);
+            const sum = scores.reduce((a, b) => a + b, 0);
+            const isConsecutive = scores.slice().sort().every((v, i, arr) => i === 0 || v- arr[i - 1] === 1);
+            const allOdd = scores.every(v => v % 2 !== 0);
+            const allEven = scores.every(v => v % 2 === 0);
+
+            let bonus = 0;
+
+            if (isConsecutive) bonus += 10;
+            if (values.includes(4)) bonus += 10;
+            if (allOdd || allEven) bonus += 6;
+            if (values.includes(3)) bonus += 7;
+            if (values.filter(v => v === 2).length === 2) bonus += 5;
+            if (sum === 24) bonus += 8;
+            if (sum === 4) bonus += 8;
+            if (sum >= 21 && sum < 24) bonus += 6;
+            if (sum > 1 && sum <= 6) bonus += 6;
+
+            return bonus;
+        }
+
+        function displayRankings() {
+            const rankingsBody = document.getElementById('rankings-body');
+            rankingsBody.innerHTML = "";
+            const sortedPlayers = players.slice().sort((a, b) => b.totalScore - a.totalScore);
+
+            let currentRank = 0;
+            let previousTotalScore = -1;
+            let currentRoundRank = 0;
+
+            // Calculate the number of players to be highlighted
+            const highlightedCount = Math.ceil(players.length * 0.15);
+
+            sortedPlayers.forEach((player, index) => {
+                if (player.totalScore !== previousTotalScore) {
+                    currentRank = currentRoundRank + 1;
+                    previousTotalScore = player.totalScore;
+                }
+                const playerRow = document.createElement('tr');
+                playerRow.innerHTML = `
+                    <td>${currentRank}</td>
+                    <td><span ${index < highlightedCount ? 'class="highlight"' : ''}>${player.name}</span></td>
+                    <td>${player.totalScore}</td>
+                `;
+                rankingsBody.appendChild(playerRow);
+                if (!player.eliminated) {
+                    currentRoundRank++;
+                }
+            });
+
+            document.getElementById('rankings').style.display = 'block';
+        }
+
+        function displayFinalRankings() {
+            const finalRankingsBody = document.getElementById('final-rankings-body');
+            finalRankingsBody.innerHTML = "";
+            const sortedPlayers = players.slice().sort((a, b) => b.totalScore - a.totalScore);
+
+            let currentRank = 0;
+            let previousTotalScore = -1;
+            const highlightedCount = Math.ceil(players.length * 0.15);
+
+            sortedPlayers.forEach((player, index) => {
+                if (player.totalScore !== previousTotalScore) {
+                    currentRank++;
+                    previousTotalScore = player.totalScore;
+                }
+                const playerRow = document.createElement('tr');
+                playerRow.innerHTML = `
+                    <td>${currentRank}</td>
+                    <td><span ${index < highlightedCount ? 'class="highlight"' : ''}>${player.name}</span></td>
+                    <td>${player.totalScore}</td>
+                `;
+                finalRankingsBody.appendChild(playerRow);
+            });
+
+            document.getElementById('final-ranking').style.display = 'block';
+            document.getElementById('rankings').style.display = 'none';  // Hide current rankings
+        }
+
+        function nextRound() {
+            if (roundConfirmed) {
+                if (currentRound < 3) {
+                    currentRound++;
+                    document.getElementById('round-title').innerText = `第${currentRound}輪`;
+
+                    const threshold = getRoundThreshold();
+                    const cutoff = Math.ceil(players.length * threshold);
+
+                    players.sort((a, b) => b.totalScore - a.totalScore);
+                    players.forEach((player, index) => {
+                        player.roundScore = 0;
+                        player.hasConfirmed = false;
+                        if (index >= cutoff) {
+                            player.eliminated = true;
+                        }
+                    });
+
+                    roundConfirmed = false;
+                    renderPlayers();
+                    if (currentRound === 1 || currentRound === 2) {
+                        displayRankings();
+                    } else if (currentRound === 3) {
+                        document.getElementById('final-rankings-btn').style.display = 'inline-block';
+                    }
+                } else {
+                    document.getElementById('round-section').style.display = 'none';
+                    displayFinalRankings();
+                }
+            } else {
+                roundConfirmed = true;
+                if (currentRound === 1 || currentRound === 2) {
+                    displayRankings();
+                } else {
+                    displayFinalRankings();
+                }
+            }
+        }
+
+        function getRoundThreshold() {
+            if (currentRound === 1) return 0.7;
+            if (currentRound === 2) return 0.5;
+            if (currentRound === 3) return 0.25;
+            return 1;
+        }
+    </script>
+</body>
+</html>

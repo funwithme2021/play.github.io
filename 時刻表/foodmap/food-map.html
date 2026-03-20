@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>店家地圖 - 動態等第 + 多樣式 + 篩選 + MarkerCluster</title>
+  <link rel="stylesheet" href="food-style.css">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- MarkerCluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+  <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+
+  <style>
+    body.page-map .hero-copy::before {
+      background:
+        radial-gradient(circle at 85% 20%, rgba(69, 107, 93, 0.24), transparent 30%),
+        radial-gradient(circle at 18% 86%, rgba(198, 106, 66, 0.18), transparent 28%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.5), transparent 60%);
+    }
+
+    .map-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+  </style>
+</head>
+<body class="page-map">
+<header>
+  <div class="hero-shell">
+    <div class="hero-copy">
+      <span class="eyebrow">旬味評圖</span>
+      <h1>店家地圖探索</h1>
+      <p>把原本的篩選、定位與地圖聚合邏輯保留下來，換成更清楚的探索介面，快速查看你想找的店在哪裡。</p>
+      <div class="hero-tags">
+        <span>MarkerCluster</span>
+        <span>定位搜尋</span>
+        <span>地圖篩選</span>
+      </div>
+    </div>
+    <div class="hero-card">
+      <div class="hero-card-label">地圖玩法</div>
+      <strong>先篩條件，再看等第顏色分布，最後放大到單一店家位置。</strong>
+      <ul class="hero-list">
+        <li>支援下拉式篩選與關鍵字搜尋兩種模式。</li>
+        <li>等第顏色與圖例保留，方便快速辨識高分店家。</li>
+        <li>可直接定位到目前位置，快速查看附近店家分布。</li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+<div class="navbar">
+  <div class="nav-inner">
+    <a class="nav-brand" href="food.html">
+      <span class="brand-mark"></span>
+      <span>旬味評圖</span>
+    </a>
+    <div class="nav-links">
+      <a href="food.html">排名首頁</a>
+      <a href="food-info.html">評分說明</a>
+      <a href="food-chart.html">統計圖表</a>
+      <a class="active" href="food-map.html">地圖探索</a>
+    </div>
+  </div>
+</div>
+
+<main class="container page-stack">
+  <div class="translate-bar" id="google_translate_element"></div>
+
+  <section class="search-section">
+    <div class="section-heading">
+      <div>
+        <h2>搜尋模式</h2>
+        <p>保留原本搜尋流程與圖層控制，只重新整理操作區塊，讓條件切換更順手。</p>
+      </div>
+      <div class="hero-tags">
+        <span>下拉式篩選</span>
+        <span>關鍵字搜尋</span>
+      </div>
+    </div>
+
+    <div class="choice-row">
+      <label class="choice-pill">
+        <input type="radio" name="searchMode" value="mode1" checked>
+        功能一（下拉式篩選）
+      </label>
+      <label class="choice-pill">
+        <input type="radio" name="searchMode" value="mode2">
+        功能二（關鍵字）
+      </label>
+    </div>
+
+    <div id="filterContainer" class="field-grid">
+      <div class="field">
+        <label for="mapCitySelect">城市</label>
+        <select id="mapCitySelect"></select>
+      </div>
+      <div class="field">
+        <label for="mapDistSelect">區域</label>
+        <select id="mapDistSelect"></select>
+      </div>
+      <div class="field">
+        <label for="mapCategorySelect">類別</label>
+        <select id="mapCategorySelect"></select>
+      </div>
+      <div class="field">
+        <label for="mapPriceSelect">價位</label>
+        <select id="mapPriceSelect"></select>
+      </div>
+      <div class="field">
+        <label for="mapGradeSelect">等第</label>
+        <select id="mapGradeSelect"></select>
+      </div>
+    </div>
+
+    <div id="keywordContainer" class="field-grid" style="display:none;">
+      <div class="field">
+        <label for="keywordInput">關鍵字</label>
+        <input type="text" id="keywordInput" placeholder="店名 / 城市 / 區域 / 類別 / 價位...">
+      </div>
+    </div>
+
+    <div class="toolbar-actions">
+      <button id="mapSearchBtn">搜尋</button>
+      <button id="locateMeBtn">定位到我的位置</button>
+    </div>
+  </section>
+
+  <section class="section-panel map-panel">
+    <div class="section-heading">
+      <div>
+        <h2>地圖視圖</h2>
+        <p>點擊標記可查看店家名稱、分數與等第，地圖圖層切換與聚合行為維持原本設定。</p>
+      </div>
+    </div>
+
+    <div class="map-stage">
+      <div id="map"></div>
+      <div class="map-legend" id="mapLegend"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>美食評分 - 地圖 (2025)</p>
+</footer>
+
+<!-- 載入資料檔 -->
+<script src="food.js"></script>
+<script>
+/* ================= 1) 動態等第邏輯 ================ */
+const WEIGHTS = {
+  taste:0.15, freshness:0.10, texture:0.15, appearance:0.10,
+  smell:0.10, portion:0.10, uniqueness:0.05, price:0.10,
+  environment:0.05, attitude:0.05, others:0.05
+};
+function computeSingleScore(d){
+  return (
+    d.taste*WEIGHTS.taste +
+    d.freshness*WEIGHTS.freshness +
+    d.texture*WEIGHTS.texture +
+    d.appearance*WEIGHTS.appearance +
+    d.smell*WEIGHTS.smell + d.portion*WEIGHTS.portion +
+    d.uniqueness*WEIGHTS.uniqueness + d.price*WEIGHTS.price +
+    d.environment*WEIGHTS.environment + d.attitude*WEIGHTS.attitude +
+    d.others*WEIGHTS.others
+  );
+}
+
+const RATIO_GRADE_CONFIG = [
+{grade:"A++",    minRatio:0.03, maxRatio:0.05},
+  {grade:"A+",    minRatio:0.08, maxRatio:0.13},
+  {grade:"A",    minRatio:0.13, maxRatio:0.20},
+  {grade:"B++",    minRatio:0.17, maxRatio:0.23},
+  {grade:"B+",    minRatio:0.20, maxRatio:0.25},
+  {grade:"B",    minRatio:0.13, maxRatio:0.25},
+  {grade:"C",  minRatio:0.05, maxRatio:0.08},
+  {grade:"F",      minRatio:0.00, maxRatio:0.05}
+];
+function assignRatioGrades(arr, maxIter=5){
+  arr.sort((a,b)=> computeSingleScore(b)- computeSingleScore(a));
+  let n= arr.length;
+  if(n===0) return arr;
+
+  // 第一次
+  let start=0;
+  for(let i=0; i<RATIO_GRADE_CONFIG.length; i++){
+    const cfg= RATIO_GRADE_CONFIG[i];
+    let midRatio= (cfg.minRatio+ cfg.maxRatio)/2;
+    let slotCount= Math.round(midRatio*n);
+    if(i=== RATIO_GRADE_CONFIG.length-1){
+      for(let j=start; j<n; j++){
+        arr[j].ratioGrade= cfg.grade;
+      }
+      break;
+    } else {
+      let endIndex= Math.min(start+slotCount, n);
+      for(let j=start; j<endIndex; j++){
+        arr[j].ratioGrade= cfg.grade;
+      }
+      start= endIndex;
+    }
+  }
+
+  // 多次迭代
+  for(let iter=0; iter<maxIter; iter++){
+    let gCount={};
+    arr.forEach(d=>{
+      gCount[d.ratioGrade]= (gCount[d.ratioGrade]||0)+1;
+    });
+    for(let i=0; i<RATIO_GRADE_CONFIG.length; i++){
+      const cfg= RATIO_GRADE_CONFIG[i];
+      const g= cfg.grade;
+      const c= gCount[g]||0;
+      const ratio= c/n;
+
+      if(ratio> cfg.maxRatio && i<RATIO_GRADE_CONFIG.length-1){
+        let overCount= Math.round(c - cfg.maxRatio*n);
+        if(overCount>0){
+          let sameArr= arr.filter(d=> d.ratioGrade===g);
+          sameArr.sort((a,b)=> computeSingleScore(a)-computeSingleScore(b));
+          for(let k=0; k<overCount && k<sameArr.length;k++){
+            sameArr[k].ratioGrade= RATIO_GRADE_CONFIG[i+1].grade;
+          }
+        }
+      } else if(ratio< cfg.minRatio && i>0){
+        let shortCount= Math.round(cfg.minRatio*n - c);
+        if(shortCount>0){
+          let prevG= RATIO_GRADE_CONFIG[i-1].grade;
+          let prevArr= arr.filter(d=> d.ratioGrade=== prevG);
+          prevArr.sort((a,b)=> computeSingleScore(a)-computeSingleScore(b));
+          for(let k=0; k<shortCount && k<prevArr.length; k++){
+            prevArr[prevArr.length-1-k].ratioGrade= g;
+          }
+        }
+      }
+    }
+    arr.sort((a,b)=> computeSingleScore(b)- computeSingleScore(a));
+    gCount={};
+    arr.forEach(d=> gCount[d.ratioGrade]= (gCount[d.ratioGrade]||0)+1);
+  }
+  return arr;
+}
+
+/* ================= 2) Map + Layers + MarkerCluster ================= */
+let map;
+let markerCluster;
+
+// 不同地圖樣式
+let baseLayers={};
+
+// Marker 顏色
+const GRADE_COLORS={
+  "A++":"#dc3545",
+  "A+":"#ffd700",
+  "A":"#ffa500",
+  "B++":"#17a2b8",
+  "B+":"#17a2b8",
+  "B":"#007bff",
+  "C":"#6610f2",
+  "F":"#6c757d"
+};
+function getMarkerIcon(grade){
+  let color= GRADE_COLORS[grade]||"#999";
+  return L.divIcon({
+    className:"",
+    html: `<div class="marker-icon" style="background:${color};"></div>`,
+    iconSize:[24,24],
+    iconAnchor:[12,12]
+  });
+}
+
+function initMap(){
+  // 動態等第 => foodData
+  assignRatioGrades(foodData,5);
+
+  // 建立各種地圖樣式 (tile layers)
+  let layerOSM= L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ maxZoom:19 });
+  let layerHOT= L.tileLayer("https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",{ maxZoom:19 });
+  let layerCartoLight= L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{ maxZoom:19 });
+  let layerStamenToner= L.tileLayer("https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}.{ext}",{
+    ext:"png", maxZoom:20
+  });
+  // 你可以再加更多
+  baseLayers={
+    "OpenStreetMap":layerOSM,
+    "OSM HOT":layerHOT,
+    "Carto Light":layerCartoLight,
+    "Stamen Toner":layerStamenToner
+  };
+
+  // 建立地圖 & MarkerCluster
+  map= L.map("map",{
+    center:[25.034,121.5645],
+    zoom:10,
+    layers:[ layerOSM ] // 預設樣式
+  });
+  markerCluster= L.markerClusterGroup();
+  map.addLayer(markerCluster);
+
+  // 加 Layers Control
+  L.control.layers(baseLayers, null, { position:"topright" }).addTo(map);
+
+  // 初始化篩選UI
+  initSelectOptions();
+  document.getElementById("mapCitySelect").addEventListener("change", updateDistrictOptions);
+
+  // Radio (mode1, mode2) => 切換下拉/關鍵字
+  document.querySelectorAll('input[name="searchMode"]').forEach(radio=>{
+    radio.addEventListener("change",(e)=>{
+      if(e.target.value==="mode1"){
+        document.getElementById("filterContainer").style.display="";
+        document.getElementById("keywordContainer").style.display="none";
+      } else {
+        document.getElementById("filterContainer").style.display="none";
+        document.getElementById("keywordContainer").style.display="";
+      }
+    });
+  });
+
+  // 綁定「搜尋」按鈕
+  document.getElementById("mapSearchBtn").addEventListener("click", showMarkers);
+
+  // 「定位到我的位置」
+  document.getElementById("locateMeBtn").addEventListener("click", locateMe);
+
+  // 預設顯示
+  showMarkers();
+
+  // 建立等第圖例
+  buildLegend();
+}
+
+// 範例: Marker Icon Legend
+function buildLegend(){
+  const legendDiv= document.getElementById("mapLegend");
+  legendDiv.innerHTML= `<strong>等第顏色對照</strong><br/>`;
+  RATIO_GRADE_CONFIG.forEach(cfg=>{
+    let g= cfg.grade;
+    let c= GRADE_COLORS[g]||"#999";
+    legendDiv.innerHTML+= `
+      <div class="legend-item">
+        <div class="legend-color" style="background:${c};"></div>
+        ${g}
+      </div>
+    `;
+  });
+}
+
+// 取得篩選模式
+function getSearchMode(){
+  return document.querySelector('input[name="searchMode"]:checked').value; // mode1 / mode2
+}
+
+// 下拉 distinct & populate
+function distinct(arr,key){
+  return [...new Set(arr.map(d=> d[key]).filter(Boolean))];
+}
+function populateSelect(sel, arr, defText){
+  sel.innerHTML="";
+  let o= document.createElement("option");
+  o.value=""; 
+  o.textContent= defText;
+  sel.appendChild(o);
+  arr.forEach(v=>{
+    let opt= document.createElement("option");
+    opt.value= v;
+    opt.textContent= v;
+    sel.appendChild(opt);
+  });
+}
+
+// 初始化下拉
+function initSelectOptions(){
+  // city
+  let cityArr= distinct(foodData,"city").sort();
+  populateSelect(document.getElementById("mapCitySelect"), cityArr, "全部");
+  // district
+  let distArr= distinct(foodData,"district").sort();
+  populateSelect(document.getElementById("mapDistSelect"), distArr, "全部");
+  // category
+  let catArr= distinct(foodData,"category").sort();
+  populateSelect(document.getElementById("mapCategorySelect"), catArr, "全部");
+  // priceLevel
+  let priceArr= distinct(foodData,"priceLevel").sort();
+  populateSelect(document.getElementById("mapPriceSelect"), priceArr, "全部");
+  // ratioGrade
+  let gSet= new Set();
+  foodData.forEach(d=> gSet.add(d.ratioGrade));
+  let gArr= [...gSet].sort();
+  populateSelect(document.getElementById("mapGradeSelect"), gArr, "全部");
+}
+
+// city -> district
+function updateDistrictOptions(){
+  const citySel= document.getElementById("mapCitySelect").value;
+  let arr= foodData;
+  if(citySel){
+    arr= arr.filter(d=> d.city=== citySel);
+  }
+  let distArr= distinct(arr,"district").sort();
+  populateSelect(document.getElementById("mapDistSelect"), distArr, "全部");
+}
+
+// 功能1: 下拉篩選
+function filterByDropdown(data){
+  const city  = document.getElementById("mapCitySelect").value;
+  const dist  = document.getElementById("mapDistSelect").value;
+  const cat   = document.getElementById("mapCategorySelect").value;
+  const price = document.getElementById("mapPriceSelect").value;
+  const grd   = document.getElementById("mapGradeSelect").value;
+
+  return data.filter(d=>{
+    if(!d.lat|| !d.lng) return false;
+    if(city && d.city!== city) return false;
+    if(dist && d.district!==dist) return false;
+    if(cat && d.category!==cat) return false;
+    if(price && d.priceLevel!==price) return false;
+    if(grd && d.ratioGrade!==grd) return false;
+    return true;
+  });
+}
+
+// 功能2: 關鍵字
+function filterByKeyword(data){
+  const kw= document.getElementById("keywordInput").value.trim().toLowerCase();
+  if(!kw) return data;
+  return data.filter(d=>{
+    if(!d.lat|| !d.lng) return false;
+    let combo= (d.storeName + d.city + d.district + d.category + d.priceLevel).toLowerCase();
+    return combo.includes(kw);
+  });
+}
+
+function showMarkers(){
+  // 清除
+  markerCluster.clearLayers();
+
+  // 讀URL
+  let sp= new URLSearchParams(window.location.search);
+  const storeParam= sp.get("storeName");
+
+  // Mode => 篩選
+  let result=[];
+  if(getSearchMode()==="mode1"){
+    result= filterByDropdown(foodData);
+  } else {
+    result= filterByKeyword(foodData);
+  }
+
+  // 建Marker
+  let theseMarkers=[];
+  result.forEach(d=>{
+    let m= createMarker(d);
+    theseMarkers.push(m);
+  });
+  markerCluster.addLayers(theseMarkers);
+
+  // 若帶 storeName => 找=> setView
+  if(storeParam){
+    let found= result.find(x=> x.storeName=== storeParam);
+    if(found){
+      map.setView([found.lat, found.lng],15);
+      return;
+    }
+  }
+  // 自動聚焦
+  if(theseMarkers.length>0){
+    let group= L.featureGroup(theseMarkers);
+    map.fitBounds(group.getBounds(), { padding:[20,20] });
+  }
+}
+
+// 建立Marker
+function createMarker(d){
+  let grade= d.ratioGrade;
+  let sc= computeSingleScore(d).toFixed(2);
+  let mk= L.marker([d.lat, d.lng],{
+    icon: getMarkerIcon(grade)
+  });
+  let html= `
+    <b><a href="${d.gmapUrl||"#"}" target="_blank"
+          style="color:blue;text-decoration:none;">
+          ${d.storeName}
+         </a></b><br/>
+    <small>評分(100): ${sc}</small><br/>
+    <small>等第: ${grade}</small>
+  `;
+  mk.bindPopup(html);
+  return mk;
+}
+
+// 使用者定位
+function locateMe(){
+  if(!navigator.geolocation){
+    alert("瀏覽器不支援 geolocation");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    let lat= pos.coords.latitude;
+    let lng= pos.coords.longitude;
+    map.setView([lat,lng], 14);
+    // optional: show a circle
+    L.circle([lat,lng],{
+      radius: 200,
+      color:"#007bff",
+      fillColor:"#66c",
+      fillOpacity:0.3
+    }).addTo(map).bindPopup("你在這裡");
+  }, err=>{
+    alert("定位失敗或被拒絕");
+  });
+}
+
+/* DOM Loaded */
+document.addEventListener("DOMContentLoaded", initMap);
+
+/* Google翻譯 (若需) */
+function googleTranslateElementInit(){
+  new google.translate.TranslateElement({pageLanguage:'zh-TW'},
+    'google_translate_element'
+  );
+}
+</script>
+<script 
+  type="text/javascript" 
+  src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit">
+</script>
+</body>
+</html>

@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>列車排點產生器 Pro</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg-body: #f3f4f6;
+      --bg-card: #ffffff;
+      --text-main: #1f2937;
+      --text-sub: #6b7280;
+      --border: #e5e7eb;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: 'Segoe UI', "Microsoft JhengHei", sans-serif;
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      flex-shrink: 0; /* 防止 header 被壓縮 */
+    }
+    header h1 { margin: 0; font-size: 1.25rem; color: var(--primary); display: flex; align-items: center; gap: 10px; }
+    header .status-bar { font-size: 0.85rem; color: var(--text-sub); }
+
+    /* Main Layout */
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden; /* 防止整個頁面捲動 */
+      gap: 1rem;
+      padding: 1rem;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Left Panel: Configuration */
+    .config-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-width: 350px;
+      overflow-y: auto; /* 左側面板整體捲動 */
+      padding-right: 5px;
+    }
+
+    /* Right Panel: Result */
+    .result-panel {
+      flex: 1;
+      background: var(--bg-card);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 350px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      padding: 1.25rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      flex-shrink: 0; /* 防止卡片被壓縮 */
+    }
+    .card h3 { margin-top: 0; margin-bottom: 1rem; font-size: 1rem; color: var(--text-main); border-bottom: 2px solid var(--bg-body); padding-bottom: 0.5rem; }
+
+    /* Inputs Grid */
+    .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; }
+    .input-group { display: flex; flex-direction: column; gap: 0.35rem; }
+    .input-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-sub); }
+    input, select {
+      padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+    
+    /* Buttons */
+    .btn {
+      padding: 0.5rem 1rem; border: none; border-radius: 6px; font-size: 0.9rem;
+      cursor: pointer; transition: all 0.2s; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: white; border: 1px solid var(--border); color: var(--text-main); }
+    .btn-secondary:hover { background: var(--bg-body); }
+    .btn-icon { padding: 0.4rem; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .full-width { width: 100%; }
+
+    /* Station List - Modified for full expansion */
+    .stations-container { 
+      /* 移除 flex: 1，讓高度自動撐開 */
+      display: flex; 
+      flex-direction: column; 
+    }
+    
+    .stations-list {
+      list-style: none; padding: 0; margin: 0;
+      /* 移除 overflow-y: auto 和 flex: 1，讓列表完整顯示 */
+      height: auto;
+      overflow: visible;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: #fafafa;
+    }
+    
+    .station-item {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.6rem 0.8rem;
+      background: white;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.2s;
+      position: relative;
+    }
+    .station-item:last-child { border-bottom: none; }
+    .station-item:hover { background: #f8fafc; }
+    .station-item.dragging { opacity: 0.5; background: #e0f2fe; border: 1px dashed var(--primary); }
+    
+    /* Drag Handle */
+    .drag-handle { cursor: grab; color: var(--text-sub); display: flex; align-items: center; }
+    
+    /* Timeline connector visual */
+    .station-item::before {
+      content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 2px; background: var(--border); z-index: 0;
+    }
+    .station-item:first-child::before { top: 50%; }
+    .station-item:last-child::before { bottom: 50%; }
+
+    .station-item select { flex: 1; background: transparent; border-color: transparent; font-weight: 500; }
+    .station-item select:hover { border-color: var(--border); background: white; }
+    
+    .remove-btn {
+      color: var(--text-sub); background: transparent; border: none; cursor: pointer; padding: 4px; border-radius: 4px;
+    }
+    .remove-btn:hover { color: var(--danger); background: #fee2e2; }
+
+    /* Result Area */
+    .result-header { padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #f9fafb; }
+    .result-content { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+    
+    .schedule-view { 
+      flex: 1; overflow-y: auto; padding: 1rem; font-family: 'Courier New', monospace; font-size: 0.95rem; line-height: 1.6;
+    }
+    .code-view {
+      height: 250px; border-top: 1px solid var(--border); background: #282c34; color: #abb2bf;
+      padding: 1rem; overflow: auto; font-family: 'Consolas', monospace; font-size: 0.85rem; margin: 0; white-space: pre;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .main-container { flex-direction: column; overflow-y: auto; }
+      .config-panel, .result-panel { min-width: 100%; overflow: visible; }
+      body { height: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 8h12"/><path d="M6 13h12"/><path d="M6 18h12"/></svg>
+    列車排點產生器 Pro
+  </h1>
+  <div class="status-bar">
+    <span id="statusMsg">準備就緒</span>
+  </div>
+</header>
+
+<div class="main-container">
+
+  <aside class="config-panel">
+    
+    <div class="card">
+      <h3>基本設定</h3>
+      <div class="input-grid">
+        <div class="input-group">
+          <label for="trainId">參考車次 (載入用)</label>
+          <div style="display:flex; gap:5px;">
+            <input list="trainIdList" id="trainId" placeholder="例: 408" style="flex:1">
+            <button class="btn btn-secondary btn-icon" onclick="loadStationList()" title="載入此車次站點">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+          </div>
+          <datalist id="trainIdList"></datalist>
+        </div>
+        
+        <div class="input-group">
+          <label for="trainType">車種</label>
+          <select id="trainType">
+            <option>自強號</option><option>普悠瑪</option><option>新自強</option>
+            <option>自強號(新)</option><option>加班車</option><option>莒光號</option>
+            <option>復興號</option><option>區間快</option><option>區間車</option>
+          </select>
+        </div>
+        
+        <div class="input-group">
+          <label for="startTime">起站發車時間</label>
+          <input type="time" id="startTime" value="08:00">
+        </div>
+      </div>
+    </div>
+
+    <div class="card stations-container">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="margin:0; border:none;">停靠站序</h3>
+        <div class="toolbar">
+          <button id="undoBtn" class="btn btn-secondary btn-icon" onclick="undo()" disabled title="復原">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+          </button>
+          <button id="redoBtn" class="btn btn-secondary btn-icon" onclick="redo()" disabled title="重做">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>
+          </button>
+        </div>
+      </div>
+      
+      <ul class="stations-list" id="stationList"></ul>
+      
+      <div class="toolbar" style="margin-top:10px;">
+        <button class="btn btn-secondary full-width" onclick="onAddClick()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新增停靠站
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <button class="btn btn-primary full-width" onclick="autoSchedule()" style="font-size:1rem; padding: 0.8rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          開始自動排點
+        </button>
+      </div>
+      <div class="toolbar">
+        <button class="btn btn-secondary" style="flex:1" onclick="saveConfig()">儲存配置</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="loadConfig()">讀取配置</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <main class="result-panel">
+    <div class="result-header">
+      <strong>排點預覽</strong>
+      <small style="color:var(--text-sub)">自動計算站間運轉時分</small>
+    </div>
+    
+    <div class="result-content">
+      <div id="scheduleOutput" class="schedule-view">
+        <div style="color:var(--text-sub); text-align:center; margin-top:2rem;">
+          請設定左側路線後，點擊「開始自動排點」
+        </div>
+      </div>
+      
+      <div style="padding: 0.5rem 1rem; background: #21252b; color: #fff; font-size: 0.8rem; border-top:1px solid #000; display:flex; justify-content:space-between;">
+        <span>JSON 輸出 (6站一排)</span>
+        <span style="cursor:pointer; color:#61dafb;" onclick="copyCode()">複製代碼</span>
+      </div>
+      <pre id="codeOutput" class="code-view"></pre>
+    </div>
+  </main>
+
+</div>
+
+<script src="train-schedule.js"></script>
+<script>
+// === 全域狀態 ==================================================
+const stationListUl = document.getElementById("stationList");
+const statusMsg = document.getElementById("statusMsg");
+let undoStack = [], redoStack = [];
+
+// (1) 初始化：在 datalist 填入所有車次
+const trainIdList = document.getElementById("trainIdList");
+
+// 檢查 trainSchedule 是否存在 (防止報錯)
+if (typeof trainSchedule !== 'undefined') {
+  Object.keys(trainSchedule).forEach(id=>{
+    const opt = document.createElement("option");
+    opt.value = id;
+    trainIdList.appendChild(opt);
+  });
+} else {
+  // 模擬資料，避免無 train-schedule.js 時全壞
+  window.stations = window.stations || ["臺北", "板橋", "桃園", "新竹", "臺中", "彰化", "嘉義", "臺南", "高雄", "屏東", "花蓮", "臺東"];
+  window.trainSchedule = {};
+  statusMsg.textContent = "注意：未偵測到 train-schedule.js，使用預設站點";
+  statusMsg.style.color = "orange";
+}
+
+// (2) 預設建立兩站
+addStationItem(); addStationItem();
+recordState();
+
+function showStatus(msg, type='normal') {
+  statusMsg.textContent = msg;
+  statusMsg.style.color = type === 'error' ? 'var(--danger)' : (type === 'success' ? 'var(--success)' : 'var(--text-sub)');
+  setTimeout(() => {
+    statusMsg.textContent = "準備就緒";
+    statusMsg.style.color = "var(--text-sub)";
+  }, 3000);
+}
+
+// ===================== Undo / Redo ============================
+function getCurrentRoute(){
+  return Array.from(stationListUl.children)
+    .map(li => li.querySelector("select").value);
+}
+function applyRoute(route){
+  stationListUl.innerHTML = "";
+  route.forEach(v => addStationItem(v));
+}
+function recordState(){
+  undoStack.push(getCurrentRoute());
+  if (undoStack.length > 100) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoRedoButtons();
+}
+function undo(){
+  if (!undoStack.length) return;
+  redoStack.push(getCurrentRoute());
+  const prev = undoStack.pop();
+  applyRoute(prev);
+  updateUndoRedoButtons();
+  showStatus("已復原");
+}
+function redo(){
+  if (!redoStack.length) return;
+  undoStack.push(getCurrentRoute());
+  const nxt = redoStack.pop();
+  applyRoute(nxt);
+  updateUndoRedoButtons();
+  showStatus("已重做");
+}
+function updateUndoRedoButtons(){
+  document.getElementById("undoBtn").disabled = undoStack.length === 0;
+  document.getElementById("redoBtn").disabled = redoStack.length === 0;
+}
+
+// ===================== 新增 / 刪除 ============================
+function onAddClick(){
+  recordState();
+  addStationItem();
+}
+
+function addStationItem(value){
+  if (!value) value = stations[0];
+
+  const li = document.createElement("li");
+  li.className = "station-item";
+  li.draggable = true;
+  li.addEventListener("dragstart", onDragStart);
+  li.addEventListener("dragover",  onDragOver);
+  li.addEventListener("drop",      onDrop);
+  li.addEventListener("dragend",   onDragEnd);
+
+  // Drag Handle
+  const handle = document.createElement("div");
+  handle.className = "drag-handle";
+  handle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>`;
+
+  const sel = document.createElement("select");
+  stations.forEach(s=>{
+    const o = document.createElement("option");
+    o.value = s;
+    o.textContent = s;
+    sel.appendChild(o);
+  });
+  sel.value = value;
+
+  const btn = document.createElement("button");
+  btn.className = "remove-btn";
+  btn.title = "移除此站";
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+  btn.addEventListener("click", ()=>{
+    recordState();
+    removeStationItem(li);
+  });
+
+  li.appendChild(handle);
+  li.appendChild(sel);
+  li.appendChild(btn);
+  stationListUl.appendChild(li);
+}
+
+function removeStationItem(li){
+  if (stationListUl.children.length <= 2){
+    alert("排點最少保留兩個站!");
+    return;
+  }
+  stationListUl.removeChild(li);
+}
+
+// ===================== Drag & Drop ============================
+let dragSrc = null;
+function onDragStart(e){
+  dragSrc = e.currentTarget;
+  e.currentTarget.classList.add("dragging");
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragOver(e){ 
+  e.preventDefault(); 
+  e.dataTransfer.dropEffect = 'move';
+}
+function onDrop(e){
+  e.preventDefault();
+  if (!dragSrc) return;
+  recordState();
+  const tgt = e.currentTarget;
+  if (dragSrc !== tgt){
+    const list = stationListUl;
+    const arr  = [...list.children];
+    const i1   = arr.indexOf(dragSrc);
+    const i2   = arr.indexOf(tgt);
+    if (i1 < i2) list.insertBefore(dragSrc, tgt.nextSibling);
+    else         list.insertBefore(dragSrc, tgt);
+  }
+}
+function onDragEnd(e){
+  e.currentTarget.classList.remove("dragging");
+  dragSrc = null;
+}
+
+// ===================== 載入現有車次站點 =======================
+function loadStationList(){
+  const id = document.getElementById("trainId").value.trim();
+  if (!trainSchedule[id]){
+    showStatus("找不到此車次："+id, 'error');
+    alert("找不到此車次："+id);
+    return;
+  }
+  recordState();
+  stationListUl.innerHTML = "";
+  trainSchedule[id]['車站時間'].forEach(pair=>{
+    addStationItem(pair[0]);
+  });
+  showStatus("已載入車次 "+id, 'success');
+}
+
+// ===================== 儲存 / 載入配置 ========================
+function saveConfig(){
+  const id = document.getElementById("trainId").value.trim() || "default";
+  const cfg = {
+    trainType: document.getElementById("trainType").value,
+    startTime: document.getElementById("startTime").value,
+    route: getCurrentRoute()
+  };
+  localStorage.setItem("route_"+id, JSON.stringify(cfg));
+  showStatus("已儲存配置："+id, 'success');
+}
+function loadConfig(){
+  const id = document.getElementById("trainId").value.trim() || "default";
+  const txt = localStorage.getItem("route_"+id);
+  if (!txt){ 
+    showStatus("無儲存配置："+id, 'error');
+    alert("無儲存配置："+id); 
+    return; 
+  }
+  const cfg = JSON.parse(txt);
+  recordState();
+  document.getElementById("trainType").value = cfg.trainType;
+  document.getElementById("startTime").value = cfg.startTime;
+  applyRoute(cfg.route);
+  showStatus("已載入配置："+id, 'success');
+}
+
+function copyCode() {
+  const code = document.getElementById("codeOutput").textContent;
+  if(!code) return;
+  navigator.clipboard.writeText(code).then(() => {
+    showStatus("代碼已複製！", 'success');
+  });
+}
+
+// ===================== 自動排點核心 ===========================
+const priorityTypes = [
+  "普悠瑪","新自強","自強號(新)","自強號",
+  "加班車","莒光號","復興號","區間快","區間車"
+];
+
+function toMinutes(hm){
+  const [h,m] = hm.split(":").map(Number);
+  return h*60 + m;
+}
+function toHHMM(min){
+  const h = Math.floor(min/60)%24;
+  const m = min%60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+}
+
+function getSegmentMinutes(mainType, A, B){
+  if(typeof trainSchedule === 'undefined') return 30;
+
+  let start = priorityTypes.indexOf(mainType);
+  if (start < 0) start = 0;
+
+  for (let i = start; i < priorityTypes.length; i++){
+    const t    = priorityTypes[i];
+    const cand = [];
+
+    for (const id in trainSchedule){
+      const d = trainSchedule[id];
+      if (d.車種 !== t) continue;
+
+      const arr = d.車站時間;
+      let iA = -1, iB = -1;
+      arr.forEach((p,j)=>{
+        if (p[0] === A) iA = j;
+        if (p[0] === B) iB = j;
+      });
+      if (iA >= 0 && iB > iA){
+        let s   = toMinutes(arr[iA][1]);
+        let e   = toMinutes(arr[iB][1]);
+        let tot = e - s;
+        if (tot < 0) tot += 1440;   // 跨夜
+        cand.push(tot);
+      }
+    }
+
+    if (cand.length){
+      cand.sort((a,b) => a - b);
+      const n = Math.max(1, Math.ceil(cand.length * 0.1));
+      const fast25 = cand.slice(0, n);
+      const avgFast25 = fast25.reduce((sum,v)=>sum+v,0) / fast25.length;
+      return Math.round(avgFast25);
+    }
+  }
+  return 30;
+}
+
+const departureMap = {};
+
+function addMinutes(hhmm, minutes){
+  const [h,m] = hhmm.split(":").map(Number);
+  let tot = h*60 + m + minutes;
+  tot = ((tot % 1440) + 1440) % 1440;
+  const nh = Math.floor(tot/60), nm = tot % 60;
+  return `${String(nh).padStart(2,"0")}:${String(nm).padStart(2,"0")}`;
+}
+
+function registerSchedule(trainId, trainType, schedule){
+  for (const [station,time] of schedule){
+    departureMap[station] = departureMap[station] || {};
+    departureMap[station][time] = departureMap[station][time] || [];
+    departureMap[station][time].push({
+      trainId,
+      trainType,
+      assignedTime: time
+    });
+  }
+}
+
+function resolveConflicts(){
+  for (const station in departureMap){
+    const times = departureMap[station];
+    for (const time in times){
+      const list = times[time];
+      if (list.length <= 1) continue;
+
+      list.sort((a,b)=> priorityTypes.indexOf(a.trainType)
+                          - priorityTypes.indexOf(b.trainType));
+      list.forEach((item,idx)=>{
+        item.assignedTime = addMinutes(time, idx);
+      });
+    }
+  }
+}
+
+function autoSchedule(){
+  const trainId   = document.getElementById("trainId").value.trim() || "9999";
+  const trainType = document.getElementById("trainType").value;
+  let   current   = toMinutes(document.getElementById("startTime").value || "08:00");
+
+  let schedule = [];
+  const route  = getCurrentRoute();
+  
+  if(route.length === 0) return;
+
+  schedule.push([ route[0], toHHMM(current) ]);
+  for (let i = 0; i < route.length - 1; i++){
+    const seg = getSegmentMinutes(trainType, route[i], route[i+1]);
+    current  += seg;
+    schedule.push([ route[i+1], toHHMM(current) ]);
+  }
+
+  registerSchedule(trainId, trainType, schedule);
+  resolveConflicts();
+
+  schedule = schedule.map(([station,origTime])=>{
+    const recs = departureMap[station] && departureMap[station][origTime];
+    if (!recs) return [station, origTime];
+    const me = recs.find(r => r.trainId === trainId);
+    return [station, me ? me.assignedTime : origTime];
+  });
+
+  // 美化輸出預覽 (保留原樣)
+  document.getElementById("scheduleOutput").innerHTML = schedule.map(p => 
+    `<div style="display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:4px 0;">
+       <span style="font-weight:bold;">${p[0]}</span> 
+       <span style="color:#2563eb; font-family:monospace;">${p[1]}</span>
+     </div>`
+  ).join("");
+
+  // === 6 站一排邏輯 (NEW) ===
+  const chunks = [];
+  for (let i = 0; i < schedule.length; i += 6) {
+      const chunk = schedule.slice(i, i + 6);
+      // 將這一組的站點轉換成字串，並加上縮排
+      chunks.push("    " + chunk.map(p => `['${p[0]}','${p[1]}']`).join(", "));
+  }
+  // 將所有組別用 換行符號 連接
+  const codeStops = chunks.join(",\n");
+
+  const code = `'${trainId}': {
+  '車種': '${trainType}',
+  '車站時間': [
+${codeStops}
+  ]
+},`;
+  document.getElementById("codeOutput").textContent = code;
+  showStatus("排點完成！", 'success');
+}
+</script>
+
+</body>
+</html>

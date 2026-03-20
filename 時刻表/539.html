@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>539 模擬 - 分成兩部分</title>
+  <style>
+    body {
+      margin: 0; padding: 0; font-family: sans-serif; background: #f3f3f3;
+    }
+    header {
+      background: #5F9EA0; color: #fff; padding: 10px 20px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    header h1 { margin: 0; font-size: 1.2rem; }
+    .nav-buttons {
+      display: flex; gap: 10px;
+    }
+    .nav-buttons button {
+      padding: 6px 12px; border: none; cursor: pointer; background: #fff; color: #333;
+      border-radius: 4px; transition: 0.3s;
+    }
+    .nav-buttons button:hover {
+      background: #eee;
+    }
+
+    main {
+      margin: 20px; background: #fff; border-radius: 8px; padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    .form-group { margin-bottom: 10px; }
+    label {
+      display: inline-block; width: 120px; font-weight: bold;
+    }
+    input[type="text"], input[type="number"] {
+      padding: 4px 8px; width: 120px; margin-right: 5px;
+    }
+    button {
+      padding: 6px 12px; cursor: pointer; border-radius: 4px; border: none;
+      background: #5F9EA0; color: #fff; transition: 0.3s;
+    }
+    button:hover { background: #53868B; }
+
+    table {
+      border-collapse: collapse; width: 100%; margin-top: 20px;
+    }
+    table th, table td {
+      border: 1px solid #ccc; padding: 6px; text-align: center;
+    }
+    table th { background: #f0f0f0; }
+
+    .info-box {
+      margin: 10px 0; padding: 10px; background: #fafafa;
+      border: 1px solid #ddd; border-radius: 4px;
+    }
+    .info-box p { margin: 5px 0; }
+
+    .btn-group { margin-top: 20px; display: flex; gap: 10px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>539 模擬</h1>
+  <div class="nav-buttons">
+    <button onclick="showSection('current')">本期資料</button>
+    <button onclick="showSection('history')">歷史資料</button>
+  </div>
+</header>
+
+<main>
+  <!-- 本期區塊 -->
+  <div id="section-current" class="section active">
+    <h2>第 <span id="labelDrawIndex">1</span> 期 資料</h2>
+    <!-- 前期累積獎金 -->
+    <div class="form-group">
+      <label>前期頭獎累積：</label>
+      <input type="number" id="carryHead" value="0" />
+    </div>
+    <div class="form-group">
+      <label>前期二獎累積：</label>
+      <input type="number" id="carrySecond" value="0" />
+    </div>
+    <!-- 產生本期 -->
+    <div class="form-group">
+      <button onclick="generateBets()">產生本期投注資料</button>
+    </div>
+
+    <!-- 顯示本期投注資訊 -->
+    <div id="currentInfo" class="info-box" style="display:none;"></div>
+
+    <!-- 投注表 -->
+    <table id="betTable">
+      <thead>
+        <tr>
+          <th>投注組合 (5個號碼)</th>
+          <th>注數</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="form-group">
+      <label>本期開獎號碼：</label>
+      <input type="text" id="winningNumbers" placeholder="5個不重複(1~39)" />
+    </div>
+    <div class="btn-group">
+      <button onclick="calculatePrize()">計算並顯示獎金</button>
+      <button onclick="exportCurrentCSV()">匯出本期投注表</button>
+    </div>
+
+    <!-- 本期計算結果 -->
+    <div id="currentResult" class="info-box" style="display:none;"></div>
+  </div>
+
+  <!-- 歷史區塊 -->
+  <div id="section-history" class="section">
+    <h2>歷史資料</h2>
+    <table id="historyTable">
+      <thead>
+        <tr>
+          <th>期數</th>
+          <th>開獎號碼</th>
+          <th>總注數</th>
+          <th>頭獎(中/單注)</th>
+          <th>二獎(中/單注)</th>
+          <th>三獎(中/單注)</th>
+          <th>四獎(中/單注)</th>
+          <th>總發獎金</th>
+          <th>頭獎累積</th>
+          <th>二獎累積</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="btn-group">
+      <button onclick="exportHistoryCSV()">匯出歷史資料</button>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ============= 全域變數 ============= */
+let currentDrawIndex=1;
+let betData = {};  // { '1,2,3,4,5': 次數, ... }
+let carryOverHead = 0;    // 前期頭獎累積
+let carryOverSecond = 0;  // 前期二獎累積
+let historyData = [];     // 歷史紀錄
+
+/* ============= UI 切換 ============= */
+function showSection(sec){
+  document.getElementById('section-current').classList.remove('active');
+  document.getElementById('section-history').classList.remove('active');
+  if(sec==='current'){
+    document.getElementById('section-current').classList.add('active');
+  } else {
+    document.getElementById('section-history').classList.add('active');
+  }
+}
+
+/* ============= 產生本期投注 ============= */
+function generateBets(){
+  betData={};
+  // 讀取前期累積
+  carryOverHead= parseInt(document.getElementById('carryHead').value)||0;
+  carryOverSecond= parseInt(document.getElementById('carrySecond').value)||0;
+  // 隨機決定本期總注數(>70000, 無上限, 這裡示範 7萬~10萬)
+  const totalBets = 80000 + Math.floor(Math.random()*50001);
+
+  // 逐筆生成
+  for(let i=0; i< totalBets; i++){
+    let combo = pick5distinct();
+    if(!betData[combo]) betData[combo]=0;
+    betData[combo]++;
+  }
+
+  // 渲染表格
+  renderBetTable();
+
+  // 顯示本期資訊
+  const totalAmount = totalBets*50;
+  const infoDiv= document.getElementById('currentInfo');
+  infoDiv.style.display='block';
+  infoDiv.innerHTML=`
+    <p>本期總注數：${totalBets} (每注50元, 總金額 ${totalAmount})</p>
+    <p>前期頭獎累積：${carryOverHead}</p>
+    <p>前期二獎累積：${carryOverSecond}</p>
+    <p>可輸入本期開獎號碼後按「計算並顯示獎金」</p>
+  `;
+  // 清空計算結果
+  document.getElementById('currentResult').style.display='none';
+  document.getElementById('currentResult').innerHTML='';
+}
+
+/* 隨機 5 個不重複 (1~39) */
+function pick5distinct(){
+  let arr=[];
+  while(arr.length<5){
+    let r= 1 + Math.floor(Math.random()*39);
+    if(!arr.includes(r)) arr.push(r);
+  }
+  arr.sort((a,b)=>a-b);
+  return arr.join(',');
+}
+
+function renderBetTable(){
+  const tbody= document.getElementById('betTable').querySelector('tbody');
+  tbody.innerHTML='';
+  const combos= Object.keys(betData).sort();
+  combos.forEach(c=>{
+    const tr= document.createElement('tr');
+    const tdCombo= document.createElement('td'); tdCombo.textContent= c;
+    const tdCount= document.createElement('td'); tdCount.textContent= betData[c];
+    tr.appendChild(tdCombo);
+    tr.appendChild(tdCount);
+    tbody.appendChild(tr);
+  });
+}
+
+/* ============= 計算並顯示獎金 ============= */
+function calculatePrize(){
+  if(!Object.keys(betData).length){
+    alert("尚未產生本期投注資料");
+    return;
+  }
+  const winStr= document.getElementById('winningNumbers').value.trim();
+  const winArr = winStr.split(',').map(n=>parseInt(n)).sort((a,b)=>a-b);
+  if(winArr.length!==5){
+    alert("請輸入5個不重複號碼(1~39)，以逗號分隔");
+    return;
+  }
+  // 總注數
+  let totalBets=0;
+  for(let c in betData){
+    totalBets+= betData[c];
+  }
+  const totalAmount= totalBets*50;
+
+  // 統計中獎
+  let headCount=0, secondCount=0, thirdCount=0, fourthCount=0;
+
+  for(let combo in betData){
+    const picks = combo.split(',').map(n=>parseInt(n));
+    const match = checkMatch(picks, winArr);
+    const cnt= betData[combo];
+    if(match===5) headCount+= cnt;
+    else if(match===4) secondCount+= cnt;
+    else if(match===3) thirdCount+= cnt;
+    else if(match===2) fourthCount+= cnt;
+  }
+
+  // 頭獎
+  const headPool = Math.floor(totalAmount*0.4 + carryOverHead);
+  let headPrizeSingle=0, distHead=0, newCarryHead=0;
+  if(headCount>0){
+    headPrizeSingle= Math.floor(headPool/ headCount);
+    distHead= headPrizeSingle* headCount;
+    newCarryHead= headPool- distHead;
+  } else {
+    // 無中獎 => 全累積
+    newCarryHead= headPool;
+  }
+
+  // 二獎
+  const secondPool = Math.floor(totalAmount*0.25 + carryOverSecond);
+  let secondPrizeSingle=0, distSecond=0, newCarrySecond=0;
+  if(secondCount>0){
+    secondPrizeSingle= Math.floor(secondPool/ secondCount);
+    distSecond= secondPrizeSingle* secondCount;
+    newCarrySecond= secondPool- distSecond;
+  } else {
+    newCarrySecond= secondPool;
+  }
+
+  // 三獎(固定400), 四獎(固定50) --此處簡化，未加動態調整
+  const thirdPrize=400, fourthPrize=50;
+  let distThird= thirdCount* thirdPrize;
+  let distFourth= fourthCount* fourthPrize;
+  let totalPaid= distHead + distSecond + distThird + distFourth;
+
+  // 顯示
+  const resultDiv= document.getElementById('currentResult');
+  resultDiv.style.display='block';
+  resultDiv.innerHTML=`
+    <p>本期開獎號碼：<strong>${winArr.join(',')}</strong></p>
+    <p>頭獎中獎注數：${headCount}，單注：${headPrizeSingle}，累積後：${newCarryHead}</p>
+    <p>二獎中獎注數：${secondCount}，單注：${secondPrizeSingle}，累積後：${newCarrySecond}</p>
+    <p>三獎中獎注數：${thirdCount}，單注：${thirdPrize}</p>
+    <p>四獎中獎注數：${fourthCount}，單注：${fourthPrize}</p>
+    <p>總發獎金：${totalPaid}</p>
+  `;
+
+  // 更新 下期累積
+  document.getElementById('carryHead').value= newCarryHead;
+  document.getElementById('carrySecond').value= newCarrySecond;
+
+  // 紀錄到歷史
+  const drawRecord = {
+    drawIndex: currentDrawIndex,
+    winArr,
+    totalBets,
+    headCount, headPrizeSingle,
+    secondCount, secondPrizeSingle,
+    thirdCount, thirdPrize,
+    fourthCount, fourthPrize,
+    totalPaid,
+    newCarryHead,
+    newCarrySecond
+  };
+  historyData.push(drawRecord);
+  renderHistory();
+  currentDrawIndex++;
+}
+
+// 檢查匹配
+function checkMatch(picks, wins){
+  let matched=0;
+  for(let n of picks){
+    if(wins.includes(n)) matched++;
+  }
+  return matched;
+}
+
+/* ============= 更新歷史表格 ============= */
+function renderHistory(){
+  const tb= document.getElementById('historyTable').querySelector('tbody');
+  tb.innerHTML='';
+  historyData.forEach((rec)=>{
+    const tr= document.createElement('tr');
+    tr.innerHTML=`
+      <td>${rec.drawIndex}</td>
+      <td>${rec.winArr.join(',')}</td>
+      <td>${rec.totalBets}</td>
+      <td>${rec.headCount}/${rec.headPrizeSingle}</td>
+      <td>${rec.secondCount}/${rec.secondPrizeSingle}</td>
+      <td>${rec.thirdCount}/${rec.thirdPrize}</td>
+      <td>${rec.fourthCount}/${rec.fourthPrize}</td>
+      <td>${rec.totalPaid}</td>
+      <td>${rec.newCarryHead}</td>
+      <td>${rec.newCarrySecond}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+/* ============= 匯出功能 ============= */
+// 匯出本期投注表CSV
+function exportCurrentCSV(){
+  if(!Object.keys(betData).length){
+    alert("尚未產生本期投注，無法匯出。");
+    return;
+  }
+  let csv= "data:text/csv;charset=utf-8,組合,注數\n";
+  const combos= Object.keys(betData).sort();
+  combos.forEach(c=>{
+    csv += `${c},${betData[c]}\n`;
+  });
+  const link= document.createElement('a');
+  link.setAttribute('href', encodeURI(csv));
+  link.setAttribute('download', `第${currentDrawIndex}期_投注.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// 匯出歷史表
+function exportHistoryCSV(){
+  if(!historyData.length){
+    alert("尚無歷史紀錄");
+    return;
+  }
+  let csv= "data:text/csv;charset=utf-8,期數,開獎號碼,總注數,頭獎(中/單注),二獎(中/單注),三獎(中/單注),四獎(中/單注),總發獎金,頭獎累積,二獎累積\n";
+  historyData.forEach((rec)=>{
+    csv+= [
+      rec.drawIndex,
+      rec.winArr.join(';'),
+      rec.totalBets,
+      `${rec.headCount}/${rec.headPrizeSingle}`,
+      `${rec.secondCount}/${rec.secondPrizeSingle}`,
+      `${rec.thirdCount}/${rec.thirdPrize}`,
+      `${rec.fourthCount}/${rec.fourthPrize}`,
+      rec.totalPaid,
+      rec.newCarryHead,
+      rec.newCarrySecond
+    ].join(",")+"\n";
+  });
+  const link= document.createElement('a');
+  link.setAttribute('href', encodeURI(csv));
+  link.setAttribute('download', "歷史資料.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+</script>
+</body>
+</html>

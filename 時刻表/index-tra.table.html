@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>臺鐵時刻表 (Pro版)</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      /* 色系設定 (Slate 風格) */
+      --bg-body: #f1f5f9;
+      --bg-surface: #ffffff;
+      --bg-header: #ffffff;
+      
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      
+      --border: #e2e8f0;
+      --border-dark: #cbd5e1;
+      
+      --primary: #0f172a;
+      --primary-hover: #1e293b;
+      
+      --accent: #2563eb;
+      
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      
+      --font-main: 'Inter', 'Noto Sans TC', sans-serif;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      font-family: var(--font-main);
+      background: var(--bg-body);
+      color: var(--text-main);
+      margin: 0;
+      padding-bottom: 40px;
+      font-size: 13px;
+    }
+
+    /* --- 控制列 --- */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: var(--bg-header);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 10px 0;
+    }
+
+    .toolbar {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* 控制項群組 */
+    .control-group {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    select, input[type="text"] {
+      padding: 5px 8px;
+      border: 1px solid var(--border-dark);
+      border-radius: 4px;
+      font-size: 13px;
+      outline: none;
+    }
+    input[type="text"] { width: 100px; }
+
+    button {
+      padding: 5px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    button.primary { background: var(--primary); color: #fff; }
+    button.primary:hover { background: var(--primary-hover); }
+    button.secondary { background: #fff; border-color: var(--border-dark); color: var(--text-main); }
+    button.secondary:hover { background: #f8fafc; }
+    
+    /* 交換按鈕樣式 */
+    button.icon-btn {
+      padding: 4px 8px;
+      font-size: 14px;
+      line-height: 1;
+      color: var(--accent);
+      border-color: var(--border);
+    }
+
+    /* --- 車種複選下拉選單 --- */
+    details.custom-select { position: relative; }
+    details.custom-select summary {
+      list-style: none; cursor: pointer;
+      padding: 5px 10px; border: 1px solid var(--border-dark); border-radius: 4px;
+      background: #fff; font-size: 13px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    details.custom-select summary::-webkit-details-marker { display: none; }
+    
+    .dropdown-menu {
+      position: absolute; top: calc(100% + 4px); left: 0;
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 6px; box-shadow: var(--shadow-md);
+      width: 220px; max-height: 300px; overflow-y: auto;
+      z-index: 100; padding: 8px;
+    }
+    .dropdown-item {
+      display: flex; align-items: center; padding: 6px;
+      border-radius: 4px; cursor: pointer;
+    }
+    .dropdown-item:hover { background: #f1f5f9; }
+    .dropdown-actions {
+      display: flex; gap: 5px; margin-bottom: 6px; padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .btn-xs { font-size: 12px; padding: 3px 8px; flex: 1; }
+
+    /* --- 表格區塊 --- */
+    .main-container {
+      max-width: 100%;
+      margin: 10px auto;
+      padding: 0 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .section-title {
+      font-size: 15px; font-weight: 700;
+      margin-bottom: 10px; padding-left: 8px;
+      border-left: 4px solid var(--accent);
+    }
+
+    .table-wrapper {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .table-scroll {
+      overflow: auto;
+      max-height: 75vh;
+      position: relative;
+    }
+
+    table {
+      border-collapse: separate;
+      border-spacing: 0;
+      width: max-content;
+      min-width: 100%;
+    }
+
+    th, td {
+      padding: 6px 4px;
+      text-align: center;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      background-clip: padding-box;
+    }
+
+    thead { position: sticky; top: 0; z-index: 20; }
+
+    /* 車次資訊欄 */
+    th.train-header {
+      position: relative;
+      background-color: var(--bg-surface) !important;
+      vertical-align: top;
+      height: 110px; /* 稍微再增加一點高度，確保空間充足 */
+      min-width: 54px;
+      font-weight: normal;
+      z-index: 10;
+    }
+    th.train-header::after {
+      content: ''; position: absolute; left: 0; right: 0; bottom: -1px;
+      border-bottom: 2px solid var(--border); pointer-events: none;
+    }
+
+    .th-content {
+      display: flex; flex-direction: column; justify-content: space-between; height: 100%;
+    }
+    .train-no { font-weight: 800; font-size: 12px; display: block; margin-bottom: 2px; }
+    .train-type { font-size: 12px; font-weight: 600; display: block; line-height: 1.2; }
+    
+    /* 路線與時間的容器 */
+    .route-wrapper {
+      margin-top: auto; /* 將整個區塊推到底部 */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+    .train-route { color: var(--text-muted); font-size: 11px; line-height: 1.2; }
+    
+    /* 耗時顯示樣式微調 */
+    .train-duration {
+      font-family: Menlo, monospace;
+      font-size: 11px;
+      color: var(--accent);
+      background: #eff6ff;
+      border-radius: 3px;
+      padding: 1px 3px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    /* 左上角 */
+    .corner-header {
+      position: sticky; left: 0; top: 0; z-index: 30;
+      background-color: var(--bg-header) !important;
+      border-right: 2px solid var(--border);
+      border-bottom: 2px solid var(--border);
+      min-width: 70px; font-weight: 700; color: var(--text-muted);
+      vertical-align: middle;
+    }
+
+    /* 左側站名 (凍結) */
+    td.station-name {
+      position: sticky; left: 0; z-index: 10;
+      background-color: var(--bg-surface) !important;
+      border-right: 2px solid var(--border);
+      font-weight: 700; color: var(--text-main);
+    }
+
+    td.time-cell {
+      font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+      font-variant-numeric: tabular-nums;
+      background: #fff;
+    }
+
+    tr:hover td { background-color: #f8fafc; }
+    tr:hover td.station-name { background-color: #f1f5f9; }
+
+    @media (max-width: 768px) {
+      .control-group { flex: 1; justify-content: space-between; }
+      .toolbar { gap: 8px; }
+      input[type="text"] { width: 80px; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="toolbar">
+      <div class="control-group">
+        <span>起</span>
+        <select id="rangeStart"></select>
+        <button id="swapBtn" class="secondary icon-btn" title="交換起訖">⇄</button>
+        <span>迄</span>
+        <select id="rangeEnd"></select>
+      </div>
+
+      <div class="control-group">
+        <span>經</span>
+        <select id="pivot1"><option value="">-</option></select>
+        <button id="applyBtn" class="primary">查詢</button>
+        <button id="resetBtn" class="secondary">重設</button>
+      </div>
+
+      <div class="control-group" style="flex-grow: 1;">
+        <input id="trainSearch" type="text" placeholder="搜尋車次" />
+        <details class="custom-select" id="typeMulti">
+          <summary>車種 <span id="typeCount" style="color:#666;font-size:11px;margin-left:4px;">(全)</span></summary>
+          <div class="dropdown-menu" id="typeDropdown"></div>
+        </details>
+        <label style="font-size:12px; display:flex; align-items:center; gap:4px; cursor:pointer;">
+          <input type="checkbox" id="onlyStopStations" /> 僅停靠
+        </label>
+        <button id="renderBtn" class="secondary" style="margin-left:auto;">重繪</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-container">
+    <div id="reservedBlock"></div>
+    <div id="nonReservedBlock"></div>
+  </div>
+
+  <script src="train-schedule.js"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // 1. 資料檢查
+    const trainSchedule = window.trainSchedule || window.TRAINS || window.schedule;
+    const stations = window.stations || window.STATIONS;
+
+    if (!trainSchedule || !stations) {
+      document.body.innerHTML = '<h3 style="padding:20px;text-align:center;color:red">找不到 train-schedule.js 資料</h3>';
+      return;
+    }
+
+    // 2. 設定與工具
+    const nonReservedTypes = new Set(['區間快', '區間車']);
+    const isSea = (id) => String(id).includes('A');
+    
+    const typeColor = (t) => ({
+      '新自強': '#8600FF', '普悠瑪': '#e11d48', '太魯閣': '#be123c',
+      '自強號': '#ea580c', '自強': '#ea580c', '自強號(新)': '#b45309',
+      '莒光號': '#d97706', '復興號': '#0284c7',
+      '區間快': '#15803d', '區間車': '#334155'
+    }[t] || '#475569');
+
+    const stationIndex = new Map(stations.map((s,i)=>[s,i]));
+    
+    const parseMin = (t) => {
+      if (!t || typeof t !== 'string') return null;
+      const m = t.match(/^(\d{1,2}):(\d{2})$/);
+      if (!m) return null;
+      return parseInt(m[1])*60 + parseInt(m[2]);
+    };
+
+    // 3. 預處理資料
+    const trainStopsMap = {};
+    const trainMeta = {};
+    const allTypesSet = new Set();
+
+    for (const id in trainSchedule) {
+      const t = trainSchedule[id];
+      if (!t || t.車種 === '加班車') continue;
+
+      const type = (t.車種 || '').trim();
+      allTypesSet.add(type);
+      const stops = t.車站時間 || [];
+      const map = new Map();
+      const idxs = [];
+
+      for (const rec of stops) {
+        if (!rec || rec.length < 2) continue;
+        map.set(rec[0], rec[1]);
+        idxs.push(stationIndex.has(rec[0]) ? stationIndex.get(rec[0]) : -1);
+      }
+
+      const firstIdx = idxs.find(v => v >= 0);
+      const lastIdx = [...idxs].reverse().find(v => v >= 0);
+      const dir = (firstIdx != null && lastIdx != null && lastIdx < firstIdx) ? -1 : 1;
+
+      trainStopsMap[id] = map;
+      trainMeta[id] = { type, stops, firstIdx, lastIdx, dir };
+    }
+
+    // 4. UI 初始化
+    const selStart = document.getElementById('rangeStart');
+    const selEnd   = document.getElementById('rangeEnd');
+    const pivot1   = document.getElementById('pivot1');
+    
+    const frag = document.createDocumentFragment();
+    stations.forEach(s => frag.appendChild(new Option(s, s)));
+    selStart.appendChild(frag.cloneNode(true));
+    selEnd.appendChild(frag.cloneNode(true));
+    pivot1.appendChild(frag.cloneNode(true));
+    
+    selStart.value = "臺北";
+    selEnd.value = "臺中";
+    if(selStart.selectedIndex === -1) selStart.selectedIndex = 0;
+    if(selEnd.selectedIndex === -1) selEnd.selectedIndex = stations.length - 1;
+
+    function loadFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const pStart = params.get('start');
+      const pEnd = params.get('end');
+      if (pStart && stations.includes(pStart)) selStart.value = pStart;
+      if (pEnd && stations.includes(pEnd)) selEnd.value = pEnd;
+    }
+    loadFromUrl();
+
+    // 複選選單
+    const allTypes = Array.from(allTypesSet).sort();
+    const selectedTypes = new Set(allTypes);
+    const typeDropdown = document.getElementById('typeDropdown');
+
+    function renderTypeDropdown() {
+      typeDropdown.innerHTML = `
+        <div class="dropdown-actions">
+          <button class="secondary btn-xs" id="tAll">全選</button>
+          <button class="secondary btn-xs" id="tNone">全無</button>
+        </div>`;
+      
+      document.getElementById('tAll').onclick = () => { selectedTypes.clear(); allTypes.forEach(t=>selectedTypes.add(t)); updateTypeUI(); renderAll(); };
+      document.getElementById('tNone').onclick = () => { selectedTypes.clear(); updateTypeUI(); renderAll(); };
+
+      allTypes.forEach(tp => {
+        const div = document.createElement('div');
+        div.className = 'dropdown-item';
+        div.innerHTML = `
+          <span style="width:8px;height:8px;border-radius:50%;background:${typeColor(tp)};margin-right:8px;"></span>
+          <label style="flex:1;cursor:pointer;font-size:12px;">${tp}</label>
+          <input type="checkbox" id="chk-${tp}" ${selectedTypes.has(tp)?'checked':''}>
+        `;
+        div.onclick = (e) => {
+          if(e.target.tagName==='INPUT') return;
+          const chk = div.querySelector('input');
+          chk.checked = !chk.checked;
+          chk.dispatchEvent(new Event('change'));
+        };
+        div.querySelector('input').onchange = (e) => {
+          if(e.target.checked) selectedTypes.add(tp); else selectedTypes.delete(tp);
+          updateCount();
+          renderAll();
+        };
+        typeDropdown.appendChild(div);
+      });
+      updateCount();
+    }
+    
+    function updateTypeUI() {
+      allTypes.forEach(tp => {
+        document.getElementById(`chk-${tp}`).checked = selectedTypes.has(tp);
+      });
+      updateCount();
+    }
+    function updateCount() {
+      const c = selectedTypes.size;
+      document.getElementById('typeCount').innerText = c === allTypes.length ? '(全)' : `(${c})`;
+    }
+    renderTypeDropdown();
+
+    document.addEventListener('click', (e) => {
+      if (!document.getElementById('typeMulti').contains(e.target)) {
+        document.getElementById('typeMulti').removeAttribute('open');
+      }
+    });
+
+    // 5. 排序與渲染邏輯
+    function passesStation(id, stIdx) {
+      const meta = trainMeta[id];
+      const a = meta.firstIdx, b = meta.lastIdx;
+      if (a == null || b == null) return false;
+      return meta.dir === 1 ? (stIdx > a && stIdx < b) : (stIdx < a && stIdx > b);
+    }
+
+    function firstTimeInRange(id, rangeSet) {
+      const meta = trainMeta[id];
+      const seq = [];
+      for (const rec of meta.stops) {
+        if (rangeSet.has(rec[0])) {
+          const m = parseMin(rec[1]);
+          if (m != null) seq.push(m);
+        }
+      }
+      if (seq.length === 0) return null;
+      let adj = [seq[0]];
+      let offset = 0;
+      for (let i=1; i<seq.length; i++) {
+        if (seq[i] < seq[i-1]) offset += 1440;
+        adj.push(seq[i] + offset);
+      }
+      return adj[0];
+    }
+
+    function isOvernightInRange(id, rangeSet) {
+      const meta = trainMeta[id];
+      let prev = null;
+      for (const rec of meta.stops) {
+        if (!rangeSet.has(rec[0])) continue;
+        const m = parseMin(rec[1]);
+        if (m == null) continue;
+        if (prev != null && m < prev) return true;
+        prev = m;
+      }
+      return false;
+    }
+
+    function updateUrl() {
+      const url = new URL(window.location);
+      url.searchParams.set('start', selStart.value);
+      url.searchParams.set('end', selEnd.value);
+      window.history.replaceState({}, '', url);
+    }
+
+    function renderAll() {
+      updateUrl();
+
+      let sIdx = stations.indexOf(selStart.value);
+      let eIdx = stations.indexOf(selEnd.value);
+      if (sIdx > eIdx) [sIdx, eIdx] = [eIdx, sIdx]; 
+      const range = stations.slice(sIdx, eIdx + 1);
+      const rangeSet = new Set(range);
+
+      const q = document.getElementById('trainSearch').value.trim();
+      const onlyStop = document.getElementById('onlyStopStations').checked;
+      const pivotVal = pivot1.value;
+
+      const reserved = [], nonRes = [];
+      
+      for (const id in trainMeta) {
+        const meta = trainMeta[id];
+        if (!selectedTypes.has(meta.type)) continue;
+        if (q && !id.includes(q)) continue;
+        if (!meta.stops.some(r => rangeSet.has(r[0]))) continue;
+        if (pivotVal && !trainStopsMap[id].has(pivotVal)) continue;
+
+        if (nonReservedTypes.has(meta.type)) nonRes.push(id);
+        else reserved.push(id);
+      }
+
+      function smartSorter(a, b) {
+        if (pivotVal) {
+           const tA = parseMin(trainStopsMap[a].get(pivotVal)) || 9999;
+           const tB = parseMin(trainStopsMap[b].get(pivotVal)) || 9999;
+           if (tA !== tB) return tA - tB;
+        }
+        for (const st of range) {
+          const mapA = trainStopsMap[a];
+          const mapB = trainStopsMap[b];
+          if (mapA.has(st) && mapB.has(st)) {
+             const tA = parseMin(mapA.get(st));
+             const tB = parseMin(mapB.get(st));
+             if (tA !== tB) return tA - tB;
+          }
+        }
+        const fA = firstTimeInRange(a, rangeSet) || 9999;
+        const fB = firstTimeInRange(b, rangeSet) || 9999;
+        return fA - fB;
+      }
+
+      function arrange(ids) {
+        const day = [], night = [];
+        ids.forEach(id => (isOvernightInRange(id, rangeSet) ? night : day).push(id));
+        day.sort(smartSorter);
+        night.sort(smartSorter);
+        return [...day, ...night];
+      }
+
+      const sortedRes = arrange(reserved);
+      const sortedNon = arrange(nonRes);
+
+      document.getElementById('reservedBlock').innerHTML = '';
+      document.getElementById('nonReservedBlock').innerHTML = '';
+
+      const reservedStList = range.filter(st => sortedRes.some(id => trainStopsMap[id].has(st)));
+      const nonReservedStList = onlyStop ? range.filter(st => sortedNon.some(id => trainStopsMap[id].has(st))) : range;
+
+      if (sortedRes.length) {
+        drawTable(sortedRes, 'reservedBlock', '對號列車', reservedStList);
+      }
+      if (sortedNon.length) {
+        drawTable(sortedNon, 'nonReservedBlock', '區間 / 區間快', nonReservedStList);
+      }
+    }
+
+    function drawTable(ids, containerId, title, stList) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = `<div class="section-title">${title} (${ids.length}班)</div>`;
+      
+      const wrapper = document.createElement('div');
+      wrapper.className = 'table-wrapper';
+      const scroll = document.createElement('div');
+      scroll.className = 'table-scroll';
+      const tbl = document.createElement('table');
+
+      const thead = tbl.createTHead();
+      const r1 = thead.insertRow();
+      const corner = r1.insertCell();
+      corner.className = 'corner-header';
+      corner.textContent = '車站';
+
+      const userStart = selStart.value;
+      const userEnd = selEnd.value;
+
+      ids.forEach(id => {
+        const meta = trainMeta[id];
+        const th = r1.insertCell();
+        th.className = 'train-header';
+        const color = typeColor(meta.type);
+        const sea = isSea(id) ? '<span style="color:#2563eb;border:1px solid #2563eb;font-size:10px;padding:0 2px;border-radius:2px;margin-left:2px">海</span>' : '';
+        const first = meta.stops[0][0];
+        const last = meta.stops[meta.stops.length-1][0];
+
+        // 計算時間
+        let durationHtml = '';
+        const map = trainStopsMap[id];
+        if (map.has(userStart) && map.has(userEnd)) {
+          let t1 = parseMin(map.get(userStart));
+          let t2 = parseMin(map.get(userEnd));
+          if (t1 !== null && t2 !== null) {
+            let diff = t2 - t1;
+            if (diff < 0) diff += 1440; // 跨日
+            const h = Math.floor(diff / 60);
+            const m = diff % 60;
+            const hStr = h > 0 ? `${h}時` : '';
+            durationHtml = `<div class="train-duration">${hStr}${m}分</div>`;
+          }
+        }
+
+        // 修改：將 durationHtml 移至 route-wrapper 內
+        th.innerHTML = `
+          <div class="th-content">
+            <div>
+              <span class="train-no" style="color:${color}">${id}</span>
+              <span class="train-type" style="color:${color}">${meta.type}${sea}</span>
+            </div>
+            
+            <div class="route-wrapper">
+              <span class="train-route">${first}<br>↓<br>${last}</span>
+              ${durationHtml}
+            </div>
+          </div>
+        `;
+      });
+
+      const tbody = tbl.createTBody();
+      stList.forEach(st => {
+        const tr = tbody.insertRow();
+        const nameTd = tr.insertCell();
+        nameTd.className = 'station-name';
+        nameTd.textContent = st;
+        const gIdx = stationIndex.get(st);
+
+        ids.forEach(id => {
+          const td = tr.insertCell();
+          const map = trainStopsMap[id];
+          if (map.has(st)) {
+            td.className = 'time-cell';
+            td.textContent = map.get(st);
+          } else {
+            if (passesStation(id, gIdx)) {
+              td.style.color = '#cbd5e1';
+              td.textContent = '↓';
+            }
+          }
+        });
+      });
+
+      scroll.appendChild(tbl);
+      wrapper.appendChild(scroll);
+      container.appendChild(wrapper);
+    }
+
+    document.getElementById('applyBtn').onclick = renderAll;
+    document.getElementById('renderBtn').onclick = renderAll;
+    document.getElementById('resetBtn').onclick = () => {
+      selStart.selectedIndex = 0;
+      selEnd.selectedIndex = stations.length-1;
+      pivot1.value = '';
+      document.getElementById('trainSearch').value = '';
+      document.getElementById('onlyStopStations').checked = false;
+      document.getElementById('tAll').click();
+    };
+
+    document.getElementById('swapBtn').onclick = () => {
+      const temp = selStart.value;
+      selStart.value = selEnd.value;
+      selEnd.value = temp;
+      renderAll();
+    };
+    
+    let timer;
+    document.getElementById('trainSearch').oninput = () => {
+      clearTimeout(timer); timer = setTimeout(renderAll, 200);
+    };
+    document.getElementById('onlyStopStations').onchange = renderAll;
+    selStart.onchange = renderAll;
+    selEnd.onchange = renderAll;
+    pivot1.onchange = renderAll;
+
+    renderAll();
+  });
+  </script>
+</body>
+</html>
